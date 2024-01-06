@@ -136,7 +136,7 @@ class LaserAnalysis1(object):
 
         ecg_hint = self.hints['Period']
         print(ecg_hint)
-        # Change here
+
         self.bipecg.calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
 
         try:
