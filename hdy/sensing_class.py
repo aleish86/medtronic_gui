@@ -10,9 +10,17 @@ import hdy
 class sensing(object):
     def __init__(self, laser_exp:object, parent: object = None) -> object:
         self.laser_exp = laser_exp
+
+        self.used_signals = {}
+        for k, v in self.laser_exp.data_source.items():
+            if v != 'blank':
+                self.used_signals[k] = v
+            else:
+                pass
+
         # Fixing and Correlating Data
-        self.fix_lag()
         self.resample_data(1000, 512)
+        self.fix_lag()
         self.ecg_filter()
         self.amplifier()
         # Filtering ECGs
@@ -64,34 +72,34 @@ class sensing(object):
         #                                   method="fft")
         #     lags = scipy.signal.correlation_lags(len(resampled_rv_data), len(self.resampled_ecg_data),
         #                                      mode="full")
-        self.used_signals = {}
-        for k, v in self.laser_exp.data_source.items():
-            if v != 'blank':
-                self.used_signals[k] = v
-            else:
-                pass
 
         if 'ECG' in self.used_signals.keys():
-            ecg_signal = self.laser_exp.ecg.data[0:6000]
             self.laser_exp.ecg.calc_ecg_peaks()
             num_peaks = min(10, len(self.laser_exp.ecg.peaks_sample))
             ecg_peaks = np.array([self.laser_exp.ecg.peaks_sample[0:num_peaks]])
+            ecg_peak_vals = np.array([self.laser_exp.ecg.data[self.laser_exp.ecg.peaks_sample[0:num_peaks]]])
         else:
-            ecg_signal = self.laser_exp.ecg3.data[0:6000]
             self.laser_exp.ecg3.calc_ecg_peaks()
             num_peaks = min(10, len(self.laser_exp.ecg3.peaks_sample))
             ecg_peaks = np.array([self.laser_exp.ecg3.peaks_sample[0:num_peaks]])
-
+            ecg_peak_vals = np.array([self.laser_exp.ecg3.data[self.laser_exp.ecg3.peaks_sample[0:num_peaks]]])
         if 'RVbip' in self.used_signals.keys():
             self.laser_exp.rvbip.calc_ecg_peaks()
             egm_signal = self.laser_exp.rvbip.data
             num_peaks = min(10, len(self.laser_exp.rvbip.peaks_sample))
             egm_peaks = np.array([self.laser_exp.rvbip.peaks_sample[0:num_peaks]])
+            egm_peak_vals = np.array([self.laser_exp.rvbip.data[self.laser_exp.rvbip.peaks_sample[0:num_peaks]]])
         else:
             self.laser_exp.rvshock.calc_ecg_peaks()
             egm_signal = self.laser_exp.rvshock.data
             num_peaks = min(10, len(self.laser_exp.rvshock.peaks_sample))
             egm_peaks = np.array([self.laser_exp.rvshock.peaks_sample[0:num_peaks]])
+            egm_peak_vals = np.array([self.laser_exp.rvshock.data[self.laser_exp.rvshock.peaks_sample[0:num_peaks]]])
+
+        ecg_peak_values = self.reject_outliers(ecg_peak_vals)
+        egm_peak_values = self.reject_outliers(egm_peak_vals)
+        mean_ecg_peak = np.mean(ecg_peak_values)
+        mean_egm_peak = np.mean(egm_peak_values)
 
         peak_diff = np.subtract(ecg_peaks, egm_peaks)
         peak_diff_new = self.reject_outliers(peak_diff)
@@ -100,29 +108,53 @@ class sensing(object):
         remove = np.arange(0, abs(time_diff), step=1)
 
         if time_diff < 0:
-            print(f"Problem. Should not be removing {len(remove)} samples from ECG Dataset")
+            print(f"Problem. Should not be removing {time_diff} samples from ECG Dataset")
 
         else:
-            print(f"Removing {len(remove)} samples from ICD Leads")
+            print(f"Removing {time_diff} samples from ICD Leads")
             egms = ['RVbip', 'RVshock', 'RAlead', 'LVlead']
             for k in self.used_signals.keys():
                 string = k.lower()
                 data_copy = self.laser_exp.data[k].data.copy()
+                length = len(data_copy) - time_diff
 
                 if k in egms:
-                    self[string + '_corr'] = np.delete(data_copy, remove, axis=0)
+                    if mean_egm_peak < mean_ecg_peak:
+                        factor = mean_ecg_peak / mean_egm_peak
+                        data_copy = data_copy * factor
+                    if ecg_peaks[0] < egm_peaks[0]:
+                        self[string + '_corr'] = np.delete(data_copy, remove, axis=0)
+                    else:
+                        self[string + '_corr'] = data_copy[:length]
+
+
+                elif k in ['ECG', 'ECG3']:
+                    if mean_ecg_peak < mean_egm_peak:
+                        factor = mean_egm_peak / mean_ecg_peak
+                        data_copy = data_copy * factor
+                    if ecg_peaks[0] > egm_peaks[0]:
+                        self[string + '_corr'] = data_copy[time_diff:len(data_copy)]
+                    else:
+                        self[string + '_corr'] = data_copy[0:length]
 
                 else:
-                    temp_d = egm_signal[time_diff::]
-                    length = len(temp_d)
-                    self[string + '_corr'] = data_copy[0:length]
+                    if ecg_peaks[0] > egm_peaks[0]:
+                        self[string + '_corr'] = data_copy[time_diff:len(data_copy)]
+                    else:
+                        self[string + '_corr'] = data_copy[0:length]
 
     def resample_data(self, original_fs, desired_fs):
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
         for k in self.used_signals.keys():
             string = k.lower()
             sec = (self[string + '_corr'].size) / original_fs
             new_length = int(sec * desired_fs)
             self[string + '_resampled'] = scipy.signal.resample(self[string + '_corr'], new_length)
+            if k in cardiac_signal:
+                self[string + '_resampled_norm'] = self[string + '_resampled'] - min(self[string + '_resampled']) / (np.max(self[string + '_resampled']) - min(self[string + '_resampled']))
+                self[string + '_resampled_norm'] = self[string + '_resampled_norm'] - np.mean(self[string + '_resampled_norm'])
+        # norm_ecg_signal = (ecg_signal - min(ecg_signal)) / (max(ecg_signal) - min(ecg_signal))
+        # norm_egm_signal = (egm_signal - min(egm_signal)) / (max(egm_signal) - min(egm_signal))
 
     def ecg_filter(self):
         ecg_sos = scipy.signal.butter(5, (0.5, 25), 'band', fs=512, output='sos')
