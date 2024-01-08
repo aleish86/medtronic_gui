@@ -279,10 +279,31 @@ class LaserAnalysis1(object):
             else:
                 ecg_peaks_sample = self.bipecg.peaks_sample - begin
 
+        elif self.data_source['RVbip'] != 'blank':
+            if begin == None:
+                ecg_peaks_sample = self.rvbip.peaks_sample
+            else:
+                ecg_peaks_sample = self.rvbip.peaks_sample - begin
+
+        elif self.data_source['RVshock'] != 'blank':
+            if begin == None:
+                ecg_peaks_sample = self.rvshock.peaks_sample
+            else:
+                ecg_peaks_sample = self.rvshock.peaks_sample - begin
+
+        elif self.data_source['ECG3'] != 'blank':
+            if begin == None:
+                ecg_peaks_sample = self.ecg3.peaks_sample
+            else:
+                ecg_peaks_sample = self.ecg3.peaks_sample - begin
+
+        else:
+            print("No ECG data found")
+
+
         ecg_peaks_sample_raw = ecg_peaks_sample.copy()
 
         laser_data = self[laser].data[begin:end+2000]
-
 
         if 'atrial' in self.mode:
             ecg_peaks_sample = ecg_peaks_sample - PR_DELAY
@@ -346,12 +367,30 @@ class LaserAnalysis1(object):
 
         result = LaserAnalysis1._calc_laser_magic(ecg_peaks_sample, laser_data)
 
+        mean_laser_beat = []
+        last_sample = 0
+        for peak in ecg_peaks_sample:
+            mean_laser_beat.append(np.mean(laser_data[last_sample:peak]))
+            last_sample = peak
+
+        self[laser].calc_peaks()
+        laser_peaks_sample = self[laser].peaks_sample[begin:end + 2000]
+        mean_laser_beat2 = []
+
+        for peak in laser_peaks_sample:
+            mean_laser_beat2.append(np.mean(laser_data[last_sample:peak]))
+            last_sample = peak
+
+        self[laser + '_mean_laser_beat'] = mean_laser_beat
+        self[laser + '_mean_laser_beat2'] = mean_laser_beat2
         self[laser + '_min_idx'] = result.min_idx
-        self[laser + '_min_idx'] = result.max_idx
+        self[laser + '_max_idx'] = result.max_idx
         self[laser + '_magic_data_all'] = result.magic_data_all
         self[laser + '_magic_data'] = result.magic_data
         self[laser + '_magic_value'] = self.results[laser.title() + '_Magic'] = result.magic_value
         self[laser + '_conf_value'] = self.results[laser.title() + '_Conf'] = result.conf_value
+        self[laser + 'delay'] = self.results[laser.title() + '_Delay'] = result.delay
+        self[laser + 'slope'] = self.results[laser.title() + 'slope'] = result.slope
 
     @staticmethod
     def _calc_laser_magic(ecg_peaks_sample, laser_data):
