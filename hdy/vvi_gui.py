@@ -142,13 +142,13 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.marker_toggle_vvi.setChecked(True)
         self.marker_toggle_vvi.stateChanged.connect(self.marker_toggle_changed)
 
-        self.bipecgmarker_toggle_vvi = QtWidgets.QCheckBox("View Bipolar ECG Marker Line")
-        self.bipecgmarker_toggle_vvi.setChecked(True)
-        self.bipecgmarker_toggle_vvi.stateChanged.connect(self.bipecgmarker_toggle_changed)
+        self.ecgmarker_toggle_vvi = QtWidgets.QCheckBox("View Bipolar ECG Marker Line")
+        self.ecgmarker_toggle_vvi.setChecked(True)
+        self.ecgmarker_toggle_vvi.stateChanged.connect(self.ecgmarker_toggle_changed)
 
-        self.bipecg_toggle_vvi = QtWidgets.QCheckBox("View Bipolar ECG")
-        self.bipecg_toggle_vvi.setChecked(True)
-        self.bipecg_toggle_vvi.stateChanged.connect(self.bipecg_toggle_changed)
+        self.ecg_toggle_vvi = QtWidgets.QCheckBox("View Bipolar ECG")
+        self.ecg_toggle_vvi.setChecked(True)
+        self.ecg_toggle_vvi.stateChanged.connect(self.ecg_toggle_changed)
 
         self.laser1_toggle_vvi = QtWidgets.QCheckBox("View Laser1")
         self.laser1_toggle_vvi.setChecked(True)
@@ -212,8 +212,8 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.m_vvi_btn_layout.addWidget(self.rvbip_threshold_line)
         self.m_vvi_btn_layout.addWidget(self.rvshock_toggle_vvi)
         self.m_vvi_btn_layout.addWidget(self.marker_toggle_vvi)
-        self.m_vvi_btn_layout.addWidget(self.bipecgmarker_toggle_vvi)
-        self.m_vvi_btn_layout.addWidget(self.bipecg_toggle_vvi)
+        self.m_vvi_btn_layout.addWidget(self.ecgmarker_toggle_vvi)
+        self.m_vvi_btn_layout.addWidget(self.ecg_toggle_vvi)
         self.m_vvi_btn_layout.addWidget(self.laser1_toggle_vvi)
         self.m_vvi_btn_layout.addWidget(self.laser2_toggle_vvi)
         self.m_vvi_btn_layout.addWidget(self.overview_toggle_vvi)
@@ -302,17 +302,17 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.rvshock_vvi_plt = self.rvshock_vvi_pi.plot()
         self.rvshock_peak_vvi_plt = self.rvshock_vvi_pi.plot()
 
-        self.markerbipecg_vvi_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItemMdtc(orientation='bottom')})
-        self.markerbipecg_vvi_pi = self.markerbipecg_vvi_pw.getPlotItem()
-        self.markerbipecg_vvi_pi.setLabel(axis='left', text="Marker Bipolar ECG")
-        self.markerbipecg_vvi_plt = self.markerbipecg_vvi_pi.plot()
-        self.markerbipecg_peak_vvi_plt = self.markerbipecg_vvi_pi.plot()
+        self.markerecg_vvi_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItemMdtc(orientation='bottom')})
+        self.markerecg_vvi_pi = self.markerecg_vvi_pw.getPlotItem()
+        self.markerecg_vvi_pi.setLabel(axis='left', text="Marker Bipolar ECG")
+        self.markerecg_vvi_plt = self.markerecg_vvi_pi.plot()
+        self.markerecg_peak_vvi_plt = self.markerecg_vvi_pi.plot()
 
-        self.bipecg_vvi_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItemMdtc(orientation='bottom')})
-        self.bipecg_vvi_pi = self.bipecg_vvi_pw.getPlotItem()
-        self.bipecg_vvi_pi.setLabel(axis='left', text="Bipolar ECG")
-        self.bipecg_vvi_plt = self.bipecg_vvi_pi.plot()
-        self.bipecg_peak_vvi_plt = self.bipecg_vvi_pi.plot()
+        self.ecg_vvi_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItemMdtc(orientation='bottom')})
+        self.ecg_vvi_pi = self.ecg_vvi_pw.getPlotItem()
+        self.ecg_vvi_pi.setLabel(axis='left', text="Bipolar ECG")
+        self.ecg_vvi_plt = self.ecg_vvi_pi.plot()
+        self.ecg_peak_vvi_plt = self.ecg_vvi_pi.plot()
 
         self.laser1_vvi_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItemMdtc(orientation='bottom')})
         self.laser1_vvi_pi = self.laser1_vvi_pw.getPlotItem()
@@ -341,59 +341,59 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         # Sharing X axis in plots
         self.rvbip_vvi_pw.setXLink(self.rvshock_vvi_pw)
         self.rvbip_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.rvbip_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.rvbip_vvi_pw.setXLink(self.ecg_vvi_pw)
         self.rvbip_vvi_pw.setXLink(self.laser1_vvi_pw)
         self.rvbip_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.rvbip_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.rvbip_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
         self.rvshock_vvi_pw.setXLink(self.rvbip_vvi_pw)
         self.rvshock_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.rvshock_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.rvshock_vvi_pw.setXLink(self.ecg_vvi_pw)
         self.rvshock_vvi_pw.setXLink(self.laser1_vvi_pw)
         self.rvshock_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.rvshock_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.rvshock_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
         self.marker_vvi_pw.setXLink(self.rvbip_vvi_pw)
         self.marker_vvi_pw.setXLink(self.rvshock_vvi_pw)
-        self.marker_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.marker_vvi_pw.setXLink(self.ecg_vvi_pw)
         self.marker_vvi_pw.setXLink(self.laser1_vvi_pw)
         self.marker_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.marker_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.marker_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
-        self.markerbipecg_vvi_pw.setXLink(self.rvbip_vvi_pw)
-        self.markerbipecg_vvi_pw.setXLink(self.rvshock_vvi_pw)
-        self.markerbipecg_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.markerbipecg_vvi_pw.setXLink(self.laser1_vvi_pw)
-        self.markerbipecg_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.markerbipecg_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.rvbip_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.rvshock_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.marker_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.laser1_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.laser2_vvi_pw)
+        self.markerecg_vvi_pw.setXLink(self.ecg_vvi_pw)
 
-        self.bipecg_vvi_pw.setXLink(self.rvbip_vvi_pw)
-        self.bipecg_vvi_pw.setXLink(self.rvshock_vvi_pw)
-        self.bipecg_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.bipecg_vvi_pw.setXLink(self.laser1_vvi_pw)
-        self.bipecg_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.bipecg_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.rvbip_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.rvshock_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.marker_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.laser1_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.laser2_vvi_pw)
+        self.ecg_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
         self.laser1_vvi_pw.setXLink(self.rvbip_vvi_pw)
         self.laser1_vvi_pw.setXLink(self.rvshock_vvi_pw)
         self.laser1_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.laser1_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.laser1_vvi_pw.setXLink(self.ecg_vvi_pw)
         self.laser1_vvi_pw.setXLink(self.laser2_vvi_pw)
-        self.laser1_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.laser1_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
         self.laser2_vvi_pw.setXLink(self.rvbip_vvi_pw)
         self.laser2_vvi_pw.setXLink(self.rvshock_vvi_pw)
         self.laser2_vvi_pw.setXLink(self.marker_vvi_pw)
-        self.laser2_vvi_pw.setXLink(self.bipecg_vvi_pw)
+        self.laser2_vvi_pw.setXLink(self.ecg_vvi_pw)
         self.laser2_vvi_pw.setXLink(self.laser1_vvi_pw)
-        self.laser2_vvi_pw.setXLink(self.markerbipecg_vvi_pw)
+        self.laser2_vvi_pw.setXLink(self.markerecg_vvi_pw)
 
         # Adding Plots to VVI Leads Layout
         self.m_vvi_leads_layout.addWidget(self.rvbip_vvi_pw, stretch=1)
         self.m_vvi_leads_layout.addWidget(self.rvshock_vvi_pw, stretch=1)
         self.m_vvi_leads_layout.addWidget(self.marker_vvi_pw, stretch=1)
-        self.m_vvi_leads_layout.addWidget(self.markerbipecg_vvi_pw, stretch=1)
-        self.m_vvi_leads_layout.addWidget(self.bipecg_vvi_pw, stretch=1)
+        self.m_vvi_leads_layout.addWidget(self.markerecg_vvi_pw, stretch=1)
+        self.m_vvi_leads_layout.addWidget(self.ecg_vvi_pw, stretch=1)
         self.m_vvi_leads_layout.addWidget(self.laser1_vvi_pw, stretch=1)
         self.m_vvi_leads_layout.addWidget(self.laser2_vvi_pw, stretch=1)
         self.m_vvi_leads_layout.addWidget(self.overview_vvi_pw, stretch=1)
@@ -484,10 +484,10 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.marker_vvi_pi.getAxis('left').setStyle(showValues=False)
         self.rvshock_vvi_pi.getAxis('left').setWidth(w=40)
         self.rvshock_vvi_pi.getAxis('left').setStyle(showValues=False)
-        self.markerbipecg_vvi_pi.getAxis('left').setWidth(w=40)
-        self.markerbipecg_vvi_pi.getAxis('left').setStyle(showValues=False)
-        self.bipecg_vvi_pi.getAxis('left').setWidth(w=40)
-        self.bipecg_vvi_pi.getAxis('left').setStyle(showValues=False)
+        self.markerecg_vvi_pi.getAxis('left').setWidth(w=40)
+        self.markerecg_vvi_pi.getAxis('left').setStyle(showValues=False)
+        self.ecg_vvi_pi.getAxis('left').setWidth(w=40)
+        self.ecg_vvi_pi.getAxis('left').setStyle(showValues=False)
         self.laser1_vvi_pi.getAxis('left').setWidth(w=40)
         self.laser2_vvi_pi.getAxis('left').setWidth(w=40)
         self.overview_vvi_pi.getAxis('left').setWidth(w=50)
@@ -501,9 +501,10 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         pg.setConfigOptions(antialias=True, background='w')
         # self.max_x_list, self.rr_list, self.amplitude_list = data_list(self.sensing.rvbip_data, self.icd_mdt_parameters['rvst_value'],self.icd_mdt_parameters['pvsb_value'])
 
-        # samples = self.sensing.resampled_bipecg_data.shape[0]
-        samples = self.sensing.bipecg_data.shape[0]
-        ecg_hint = self.laser_exp.hints['Period']
+        # samples = self.sensing.resampled_ecg_data.shape[0]
+        if self.laser_exp.data_source['RVbip'] != 'blank':
+            samples = self.sensing.rvbip_data.shape[0]
+            ecg_hint = self.laser_exp.hints['Period']
 
         m_beat_end = 500 + self.trace_view
         m_beat_start = max(0, self.trace_view - 10000)
@@ -519,7 +520,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         rvshock_vvi_data = self.sensing.rvshock_data[m_beat_start:m_beat_end]
 
-        bipecg_vvi_data = self.sensing.bipecg_data[m_beat_start:m_beat_end]
+        ecg_vvi_data = self.sensing.ecg_data[m_beat_start:m_beat_end]
 
         laser1_vvi_data = self.sensing.laser1_data[m_beat_start:m_beat_end]
 
@@ -534,7 +535,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         # except:
         #     pass
         # try:
-        #     bipecg_vvi_data = self.sensing.bipecg_data[m_beat_start:m_beat_end]
+        #     ecg_vvi_data = self.sensing.ecg_data[m_beat_start:m_beat_end]
         # except:
         #     pass
         # try:
@@ -553,8 +554,8 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                                       # *1.95
 
                     r_peak_max = self.sensing.rvbip_data[r_peak]
-                    # rpeakmax_bipecg = bipecg_vvi_data[r_peak]
-                    # print('rpeakmax_bipecg: ', rpeakmax_bipecg)
+                    # rpeakmax_ecg = ecg_vvi_data[r_peak]
+                    # print('rpeakmax_ecg: ', rpeakmax_ecg)
                     print('r_peak_max: ', r_peak)
                     self.m_begin = m_beat_start
                     self.m_end = m_beat_end
@@ -565,13 +566,13 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                     else:
                         rpeak_area = 150
                     beat_plot = self.sensing.rvbip_data[max(r_peak - rpeak_area, 0): r_peak + rpeak_area]
-                    # beat_plot = self.sensing.bipecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
+                    # beat_plot = self.sensing.ecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
 
-                    # bipecg_beatplot = self.sensing.bipecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
+                    # ecg_beatplot = self.sensing.ecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
                     r_peak_min = np.min(beat_plot)
 
 
-                    # rpeakmin_bipecg = np.min(bipecg_beatplot)
+                    # rpeakmin_ecg = np.min(ecg_beatplot)
                     print('r_peak_min: ', r_peak_min)
 
                     self.icd_mdt_parameters['amplitude'] = abs(r_peak_max) + abs(r_peak_min)
@@ -762,15 +763,15 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
                         self.marker_vvi_pw.addItem(marker_inf_line)
                         marker_inf_line.label.setPosition(-0.5)
-                        # bipecgmarker_inf_line = pg.InfiniteLine(pos=self.x_bipecgmarker, angle=90, movable=False,
-                        #                                          label=self.bipecgmarker_label,
+                        # ecgmarker_inf_line = pg.InfiniteLine(pos=self.x_ecgmarker, angle=90, movable=False,
+                        #                                          label=self.ecgmarker_label,
                         #                                          pen='k', span=(0.5, 1))
-                        # self.bipecg_vvi_pw.addItem(bipecgmarker_inf_line)
-                        # bipecgmarker_inf_line.label.setPosition(-0.5)
+                        # self.ecg_vvi_pw.addItem(ecgmarker_inf_line)
+                        # ecgmarker_inf_line.label.setPosition(-0.5)
 
                         if self.marker_label == 'TD' or self.marker_label == 'FD' or self.marker_label == 'FVT':
                             self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_marker, markers='v', pen='r'))
-                            # self.bipecgmarker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_bipecgmarker, markers='v', pen='r'))
+                            # self.ecgmarker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_ecgmarker, markers='v', pen='r'))
                             # self.atp_delivery_lbl.show()
                             # self.charging_lbl.show()
 
@@ -800,7 +801,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=0, angle=0, pen='k', movable=False))
         # self.marker_vvi_pw.addLine(x=None, y=0, pen ='k')
         # plot(y=0.1, pen='k')
-        self.bipecg_vvi_plt.setData(x=m_vvi_range, y=bipecg_vvi_data, pen='#0FA00F', symbol=None,
+        self.ecg_vvi_plt.setData(x=m_vvi_range, y=ecg_vvi_data, pen='#0FA00F', symbol=None,
                                     antialise=True,
                                     autoDownsample=True, clipToView=True)
         self.laser1_vvi_plt.setData(x=m_vvi_range, y=laser1_vvi_data, pen='#03c6fc', symbol=None,
@@ -810,7 +811,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                                     antialise=True,
                                     autoDownsample=True, clipToView=True)
 
-        self.overview_vvi_plt.setData(x=np.arange(samples), y=self.sensing.resampled_bipecg_data, pen='#0FA00F',
+        self.overview_vvi_plt.setData(x=np.arange(samples), y=self.sensing.resampled_ecg_data, pen='#0FA00F',
                                       symbol=None,
                                       antialise=True, autoDownsample=True, clipToView=True)
         self.overview_infline = pg.InfiniteLine(pos=m_beat_end, angle=90, pen='#fffb1a80', movable=False)
@@ -1306,11 +1307,11 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         else:
             self.laser2_vvi_pw.hide()
 
-    def bipecg_toggle_changed(self, state):
+    def ecg_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
-            self.bipecg_vvi_pw.show()
+            self.ecg_vvi_pw.show()
         else:
-            self.bipecg_vvi_pw.hide()
+            self.ecg_vvi_pw.hide()
 
     def rvshock_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
@@ -1330,11 +1331,11 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         else:
             self.marker_vvi_pw.hide()
-    def bipecgmarker_toggle_changed(self, state):
+    def ecgmarker_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
-            self.bipecgmarker_vvi_pw.show()
+            self.ecgmarker_vvi_pw.show()
         else:
-            self.bipecgmarker_vvi_pw.hide()
+            self.ecgmarker_vvi_pw.hide()
 
     def overview_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
@@ -1553,8 +1554,8 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                     round(self.laser_exp.results['Laser2_Conf'], 4)) + ")")
 
             self.rr_value_vvi.setText(
-                "RR (RV Bipolar Lead): " + str(int(np.mean(np.diff(self.laser_exp.bipecg.peaks_sample)))))
-            self.hr_value_vvi.setText("HR: " + str(int(60000 / np.mean(np.diff(self.laser_exp.bipecg.peaks_sample)))))
+                "RR (RV Bipolar Lead): " + str(int(np.mean(np.diff(self.laser_exp.ecg.peaks_sample)))))
+            self.hr_value_vvi.setText("HR: " + str(int(60000 / np.mean(np.diff(self.laser_exp.ecg.peaks_sample)))))
 
             try:
                 self.sbp_value_vvi.setText("SBP: " + str(self.laser_exp.results['SBP_Mean']))

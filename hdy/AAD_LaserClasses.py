@@ -196,8 +196,7 @@ class LaserAnalysis1(object):
         if self.data_source['RAlead']!= 'blank':
             self.results['Median_AA (RA)'] = int(np.median(np.diff(self.ralead.peaks_sample)))
 
-        try:
-            for i, (sbp, map, laser1, laser2, laser1peak, laser2peak) in enumerate(zip(self.pressure.peaks_value, self.pressure.map_beat,
+        for i, (sbp, map, laser1, laser2, laser1peak, laser2peak) in enumerate(zip(self.pressure.peaks_value, self.pressure.map_beat,
                                                                self.laser1_mean_laser_beat,
                                                                self.laser2_mean_laser_beat, self.laser1.peaks_value, self.laser2.peaks_value)):
                 self.results_beatbybeat['Patient'].append(self.patient)
@@ -217,7 +216,7 @@ class LaserAnalysis1(object):
                 self.results_beatbybeat["Laser1_Peak"].append(laser1peak)
                 self.results_beatbybeat["Laser2_Peak"].append(laser2peak)
 
-            pass
+                pass
 
     def init_results(self):
         self.results['Patient'] = self.patient
@@ -402,7 +401,7 @@ class LaserAnalysis1(object):
 
     @staticmethod
     def _calc_laser_magic(ecg_peaks_sample, laser_data):
-
+        logging.info(f"ecg_peaks: {ecg_peaks_sample}")
         laser_data = laser_data + 10
         laser_data = np.log(laser_data) + laser_data/200
         laser_data = mmt.butter_bandpass_filter(laser_data, 0.5, 25.0, 1000, order=2)
@@ -410,99 +409,98 @@ class LaserAnalysis1(object):
 
         print(f"ecg_peaks: {ecg_peaks_sample}")
 
-
         mean_RR = int(4*(np.mean(np.diff(ecg_peaks_sample))//4))
         median_RR = int(np.median(np.diff(ecg_peaks_sample)))
         print(f"Mean {mean_RR} RR")
         print(f"Median {median_RR} RR")
+        try:
+            if True:
+                laser_peaks = mmt.find_peaks.find_peaks_cwt_refined(-laser_data, np.array([20,50,100,150,200,300,500]), decimate=True, decimate_factor=10)
 
-        if True:
-            laser_peaks = mmt.find_peaks.find_peaks_cwt_refined(-laser_data, np.array([20,50,100,150,200,300,500]), decimate=True, decimate_factor=10)
+                outer_delay = np.subtract.outer(ecg_peaks_sample, laser_peaks)
+                outer_delay[outer_delay>=0] = -100000
 
-            outer_delay = np.subtract.outer(ecg_peaks_sample, laser_peaks)
-            outer_delay[outer_delay>=0] = -100000
+                outer_delay_max = np.max(outer_delay, axis=1)
 
-            outer_delay_max = np.max(outer_delay, axis=1)
+                shift = np.int(-np.median(outer_delay_max))
 
-            shift = np.int(-np.median(outer_delay_max))
+                if shift <0:
+                    shift = 0
 
-            if shift <0:
-                shift = 0
+                if shift > 1000:
+                    shift = 0
 
-            if shift > 1000:
-                shift = 0
+                print("shift: ", shift)
 
-            print("shift: ", shift)
+                pre_shift = shift
+                post_shift = shift
 
-            pre_shift = shift
-            post_shift = shift
+            else:
+                pre_shift = 0
+                post_shift = 0
 
-        else:
-            pre_shift = 0
-            post_shift = 0
+            laser_sum = np.zeros(1000)
+            inc_peaks = 0
+            laser_list = []
 
-        laser_sum = np.zeros(1000)
-        inc_peaks = 0
-        laser_list = []
+            peaks_num = ecg_peaks_sample.shape[0]
 
-        peaks_num = ecg_peaks_sample.shape[0]
+            for i in np.arange(peaks_num-1):
+                print(i)
+                beat_begin = ecg_peaks_sample[i] + pre_shift
+                beat_end = ecg_peaks_sample[i+1] + post_shift
 
-        for i in np.arange(peaks_num-1):
-            print(i)
-            beat_begin = ecg_peaks_sample[i] + pre_shift
-            beat_end = ecg_peaks_sample[i+1] + post_shift
+                if beat_end > len(laser_data):
+                    print("Not enough laser data after shifting")
+                    continue
 
-            if beat_end > len(laser_data):
-                print("Not enough laser data after shifting")
-                continue
+                if beat_end - beat_begin > median_RR * 2:
+                    print("Hello")
+                    continue
 
-            if beat_end - beat_begin > median_RR * 2:
-                print("Hello")
-                continue
+                if beat_end - beat_begin < median_RR * 0.5:
+                    print("Hello")
+                    continue
 
-            if beat_end - beat_begin < median_RR * 0.5:
-                print("Hello")
-                continue
+                laser_temp = laser_data[beat_begin:beat_end]
 
-            laser_temp = laser_data[beat_begin:beat_end]
-
-            xs = np.linspace(0, 1000, num=laser_temp.shape[0])
-            laser_f = scipy.interpolate.interp1d(xs, laser_temp)
-            laser_temp_thousand = laser_f(np.linspace(0, 1000, num=1000))
-            laser_temp_thousand = scipy.signal.detrend(laser_temp_thousand, type='constant')
-            laser_sum = laser_sum + laser_temp_thousand
-            laser_list.append(laser_temp_thousand)
-            inc_peaks = inc_peaks+1
+                xs = np.linspace(0, 1000, num=laser_temp.shape[0])
+                laser_f = scipy.interpolate.interp1d(xs, laser_temp)
+                laser_temp_thousand = laser_f(np.linspace(0, 1000, num=1000))
+                laser_temp_thousand = scipy.signal.detrend(laser_temp_thousand, type='constant')
+                laser_sum = laser_sum + laser_temp_thousand
+                laser_list.append(laser_temp_thousand)
+                inc_peaks = inc_peaks+1
 
 
-        laser_ar = np.array(laser_list)
+            laser_ar = np.array(laser_list)
 
-        knots = np.linspace(0, 1000, 11)
-        bspline_features = BSplineFeatures(knots, degree=3, periodic=False)
+            knots = np.linspace(0, 1000, 11)
+            bspline_features = BSplineFeatures(knots, degree=3, periodic=False)
 
-        x_fit = np.arange(1000).repeat(laser_ar.shape[0]).ravel()
-        y_fit = laser_ar.T.ravel()
+            x_fit = np.arange(1000).repeat(laser_ar.shape[0]).ravel()
+            y_fit = laser_ar.T.ravel()
 
-        model = make_pipeline(bspline_features, HuberRegressor())
-        model.fit(x_fit[:,None], y_fit)
+            model = make_pipeline(bspline_features, HuberRegressor())
+            model.fit(x_fit[:,None], y_fit)
 
-        x_predict = np.arange(0,1000)
-        y_predict = model.predict(x_predict[:,None])
+            x_predict = np.arange(0,1000)
+            y_predict = model.predict(x_predict[:,None])
 
-        laser_magic = y_predict
+            laser_magic = y_predict
 
-        y_predict_all = model.predict(x_fit[:, None])
-        conf_pct = r2_score(y_fit, y_predict_all) * 100
+            y_predict_all = model.predict(x_fit[:, None])
+            conf_pct = r2_score(y_fit, y_predict_all) * 100
 
-        if laser_ar.shape[0] <3:
-            conf_pct = -1
+            if laser_ar.shape[0] <3:
+                conf_pct = -1
 
-        laser_max_idx = np.argmax(laser_magic)
-        laser_min_idx = np.argmin(laser_magic)
+            laser_max_idx = np.argmax(laser_magic)
+            laser_min_idx = np.argmin(laser_magic)
 
-        laser_ptp = laser_magic[laser_max_idx] - laser_magic[laser_min_idx]
+            laser_ptp = laser_magic[laser_max_idx] - laser_magic[laser_min_idx]
 
-        laser_magic_value = 100 * (np.exp((laser_ptp) / 2) - 1)
+            laser_magic_value = 100 * (np.exp((laser_ptp) / 2) - 1)
 
             if laser_max_idx != 0:
                 if laser_max_idx > laser_min_idx:
@@ -510,8 +508,7 @@ class LaserAnalysis1(object):
                 else:
                     laser_slope = np.max(abs(np.gradient(laser_magic[laser_max_idx:laser_min_idx])))
 
-                # if np.isinf(laser_slope):
-                #     laser_slope = 0
+
             else:
                 laser_slope = 0
             laser_slope = laser_slope * 1000
@@ -519,13 +516,14 @@ class LaserAnalysis1(object):
             print(f"Laser Magic Value{laser_magic_value}, Laser ptp{laser_ptp}, Laser Conf{conf_pct}")
 
             out = MagicResults(max_idx=laser_max_idx,
-                               min_idx=laser_min_idx,
-                               magic_data_all=laser_ar,
-                               magic_data=laser_magic,
-                               magic_value=laser_magic_value,
-                               conf_value=conf_pct,
-                               delay=shift,
-                               slope=laser_slope)
+                           min_idx=laser_min_idx,
+                           magic_data_all=laser_ar,
+                           magic_data=laser_magic,
+                           magic_value=laser_magic_value,
+                           conf_value=conf_pct,
+                           delay=shift,
+                           slope=laser_slope)
+
         except Exception:
             logging.exception(f"Problem in calc_laser_magic")
             out = MagicResults(max_idx=None,

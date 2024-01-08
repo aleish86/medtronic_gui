@@ -109,14 +109,11 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
         # Fixing and Correlating Data
         # self.resample_data(1000, 512)
-        print("shape", self.laser_exp.rvbip.data.shape)
-        print("size", self.laser_exp.rvbip.data.size)
-        print("length, ", len(self.laser_exp.rvbip.data))
 
         # Filtering ECGs
-        self.ecg_filter()
+        # self.ecg_filter()
         # self.fix_lag()
-        self.amplifier()
+        # self.amplifier()
         # self.rectifier()
 
         # Initialize Memory
@@ -199,9 +196,9 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.lvlead_toggle.setChecked(False)
         self.lvlead_toggle.stateChanged.connect(self.lvlead_toggle_changed)
 
-        self.bipecg_toggle = QtWidgets.QCheckBox("View Bipolar ECG")
-        self.bipecg_toggle.setChecked(True)
-        self.bipecg_toggle.stateChanged.connect(self.bipecg_toggle_changed)
+        self.ecg_toggle = QtWidgets.QCheckBox("View Bipolar ECG")
+        self.ecg_toggle.setChecked(True)
+        self.ecg_toggle.stateChanged.connect(self.ecg_toggle_changed)
 
         self.ecg3_toggle = QtWidgets.QCheckBox("View 3 lead ECG")
         self.ecg3_toggle.setChecked(False)
@@ -224,7 +221,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
         # Combo boxes for viewer settings
         self.hrv_combo = QtWidgets.QComboBox()
-        self.hrv_combo.addItems("No-RR-Intervals BipECG 3L-ECG RVbip RVShock".split())
+        self.hrv_combo.addItems("No-RR-Intervals ecg 3L-ECG RVbip RVShock".split())
         self.hrv_combo.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.hrv_combo.currentIndexChanged.connect(self.update_data)
 
@@ -275,7 +272,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.btn_layout.addWidget(self.rvbip_toggle)
         self.btn_layout.addWidget(self.rvshock_toggle)
         self.btn_layout.addWidget(self.lvlead_toggle)
-        self.btn_layout.addWidget(self.bipecg_toggle)
+        self.btn_layout.addWidget(self.ecg_toggle)
         self.btn_layout.addWidget(self.ecg3_toggle)
         self.btn_layout.addWidget(self.bp_toggle)
         self.btn_layout.addWidget(self.laser1_toggle)
@@ -307,11 +304,11 @@ class MedtronicGui(QtWidgets.QMainWindow):
         # Plot Widgets
         time_axis = TimeAxisItem(orientation='bottom')
 
-        self.bipecg_pw = pg.PlotWidget(axisItems={'bottom': time_axis})
-        self.bipecg_pi = self.bipecg_pw.getPlotItem()
-        self.bipecg_pi.setLabel(axis='left', text="Bipolar ECG")
-        self.bipecg_plt = self.bipecg_pi.plot()
-        self.bipecg_peak_plt = self.bipecg_pi.plot()
+        self.ecg_pw = pg.PlotWidget(axisItems={'bottom': time_axis})
+        self.ecg_pi = self.ecg_pw.getPlotItem()
+        self.ecg_pi.setLabel(axis='left', text="Bipolar ECG")
+        self.ecg_plt = self.ecg_pi.plot()
+        self.ecg_peak_plt = self.ecg_pi.plot()
 
         self.rvbip_pw = pg.PlotWidget(axisItems={'bottom': TimeAxisItem(orientation='bottom')})
         self.rvbip_pi = self.rvbip_pw.getPlotItem()
@@ -375,7 +372,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.plot_layout.addWidget(self.rvshock_pw, stretch=1)
         self.plot_layout.addWidget(self.ralead_pw, stretch=1)
         self.plot_layout.addWidget(self.lvlead_pw, stretch=1)
-        self.plot_layout.addWidget(self.bipecg_pw, stretch=1)
+        self.plot_layout.addWidget(self.ecg_pw, stretch=1)
         self.plot_layout.addWidget(self.ecg3_pw, stretch=1)
         self.plot_layout.addWidget(self.pressure_pw, stretch=1)
         self.plot_layout.addWidget(self.laser1_pw, stretch=1)
@@ -420,7 +417,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.ralead_pw.sigRangeChanged.connect(self.overview_region_update)
         self.rvshock_pw.sigRangeChanged.connect(self.overview_region_update)
         self.lvlead_pw.sigRangeChanged.connect(self.overview_region_update)
-        self.bipecg_pw.sigRangeChanged.connect(self.overview_region_update)
+        self.ecg_pw.sigRangeChanged.connect(self.overview_region_update)
         self.ecg3_pw.sigRangeChanged.connect(self.overview_region_update)
         self.pressure_pw.sigRangeChanged.connect(self.overview_region_update)
         self.laser1_pw.sigRangeChanged.connect(self.overview_region_update)
@@ -434,8 +431,8 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.rvshock_pi.getAxis('left').setStyle(showValues=False)
         self.lvlead_pi.getAxis('left').setWidth(w=50)
         self.lvlead_pi.getAxis('left').setStyle(showValues=False)
-        self.bipecg_pi.getAxis('left').setWidth(w=50)
-        self.bipecg_pi.getAxis('left').setStyle(showValues=False)
+        self.ecg_pi.getAxis('left').setWidth(w=50)
+        self.ecg_pi.getAxis('left').setStyle(showValues=False)
         self.ecg3_pi.getAxis('left').setWidth(w=50)
         self.ecg3_pi.getAxis('left').setStyle(showValues=False)
         self.pressure_pi.getAxis('left').setWidth(w=50)
@@ -454,11 +451,11 @@ class MedtronicGui(QtWidgets.QMainWindow):
                                                       self.icd_mdt_parameters['rvst_value'],
                                                       self.icd_mdt_parameters['pvsb_value'])
         except:
-            # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.bipecg.data,self.icd_mdt_parameters['rvst_value'], self.icd_mdt_parameters['pvsb_value'])
+            # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.ecg.data,self.icd_mdt_parameters['rvst_value'], self.icd_mdt_parameters['pvsb_value'])
             # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.rvbip.data,
             #                                                                self.icd_mdt_parameters['rvst_value'],
             #                                                                self.icd_mdt_parameters['pvsb_value'])
-            self.max_x_list, self.rr_list = data_list(self.laser_exp.bipecg.data,
+            self.max_x_list, self.rr_list = data_list(self.laser_exp.ecg.data,
                                                       self.icd_mdt_parameters['rvst_value'],
                                                       self.icd_mdt_parameters['pvsb_value'])
 
@@ -476,16 +473,16 @@ class MedtronicGui(QtWidgets.QMainWindow):
             self.rvshock_peak_plt.clear()
             self.rvbip_peak_plt.clear()
             self.ecg3_peak_plt.clear()
-            self.bipecg_peak_plt.clear()
+            self.ecg_peak_plt.clear()
 
         elif self.hrv_combo.currentIndex() == 1:
-            self.laser_exp.bipecg.calc_ecg_peaks(ecg_hint=ecg_hint)
-            self.hrv_xs = self.laser_exp.bipecg.peaks_sample[1:]
-            self.hrv_ys = 60000 / np.diff(self.laser_exp.bipecg.peaks_sample)
-            self.bipecg_peaks_x = self.laser_exp.bipecg.peaks_sample
-            self.bipecg_peaks_y = self.laser_exp.bipecg.peaks_value
+            self.laser_exp.ecg.calc_ecg_peaks(ecg_hint=ecg_hint)
+            self.hrv_xs = self.laser_exp.ecg.peaks_sample[1:]
+            self.hrv_ys = 60000 / np.diff(self.laser_exp.ecg.peaks_sample)
+            self.ecg_peaks_x = self.laser_exp.ecg.peaks_sample
+            self.ecg_peaks_y = self.laser_exp.ecg.peaks_value
 
-            self.bipecg_peak_plt.setData(x=self.bipecg_peaks_x, y=self.bipecg_peaks_y,
+            self.ecg_peak_plt.setData(x=self.ecg_peaks_x, y=self.ecg_peaks_y,
                                          pen=None, symbol='o', size=4, pxMode=True,
                                          antialise=True, autoDownsample=False, downsampleMethod='peak',
                                          clipToView=False)
@@ -506,23 +503,23 @@ class MedtronicGui(QtWidgets.QMainWindow):
                                        antialise=True, autoDownsample=False, downsampleMethod='peak', clipToView=False)
             self.rvshock_peak_plt.clear()
             self.rvbip_peak_plt.clear()
-            self.bipecg_peak_plt.clear()
+            self.ecg_peak_plt.clear()
         elif self.hrv_combo.currentIndex() == 3:
             self.laser_exp.rvbip.calc_ecg_peaks(ecg_hint=ecg_hint)
             self.hrv_xs1 = self.laser_exp.rvbip.peaks_sample[1:]
             self.hrv_ys1 = 60000 / np.diff(self.laser_exp.rvbip.peaks_sample)
-            self.bipecg_peaks_x1 = self.laser_exp.rvbip.peaks_sample
-            self.bipecg_peaks_y1 = self.laser_exp.rvbip.peaks_value
+            self.ecg_peaks_x1 = self.laser_exp.rvbip.peaks_sample
+            self.ecg_peaks_y1 = self.laser_exp.rvbip.peaks_value
 
-            bipecg_peaks_x = self.bipecg_peaks_x1
-            bipecg_peaks_y = self.bipecg_peaks_y1
+            ecg_peaks_x = self.ecg_peaks_x1
+            ecg_peaks_y = self.ecg_peaks_y1
 
-            self.rvbip_peak_plt.setData(x=bipecg_peaks_x, y=bipecg_peaks_y,
+            self.rvbip_peak_plt.setData(x=ecg_peaks_x, y=ecg_peaks_y,
                                         pen=None, symbol='o', size=4, pxMode=True,
                                         antialise=True, autoDownsample=False, downsampleMethod='peak', clipToView=False)
             self.rvshock_peak_plt.clear()
             self.ecg3_peak_plt.clear()
-            self.bipecg_peak_plt.clear()
+            self.ecg_peak_plt.clear()
         elif self.hrv_combo.currentIndex() == 4:
 
             self.laser_exp.rvshock.calc_ecg_peaks(ecg_hint="rvshock")
@@ -539,10 +536,10 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
             self.rvbip_peak_plt.clear()
             self.ecg3_peak_plt.clear()
-            self.bipecg_peak_plt.clear()
+            self.ecg_peak_plt.clear()
 
         if self.rect_combo.currentIndex() == 0:
-            bip_ecg = self.laser_exp.bipecg.data.copy()
+            bip_ecg = self.laser_exp.ecg.data.copy()
             ecg3 = self.laser_exp.ecg3.data.copy()
             rvshock = self.laser_exp.rvshock.data.copy()
             rvbip = self.laser_exp.rvbip.data.copy()
@@ -551,7 +548,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
         elif self.rect_combo.currentIndex() == 1:
             self.rectifier()
-            bip_ecg = self.rect_bipecg
+            bip_ecg = self.rect_ecg
             ecg3 = self.rect_ecg3
             rvshock = self.rect_rvshock
             rvbip = self.rect_rvbip
@@ -560,7 +557,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
         elif self.rect_combo.currentIndex() == 2:
             self.derivatives()
-            bip_ecg = self.gradient_bipecg
+            bip_ecg = self.gradient_ecg
             ecg3 = self.gradient_ecg3
             rvshock = self.gradient_rvshock
             rvbip = self.gradient_rvbip
@@ -568,7 +565,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
             lv = self.gradient_lvlead
 
         elif self.rect_combo.currentIndex() == 3:
-            bip_ecg = self.laser_exp.bipecg.data
+            bip_ecg = self.laser_exp.ecg.data
             ecg3 = self.laser_exp.ecg3.data
             rvshock = self.laser_exp.rvshock.data
             rvbip = self.laser_exp.rvbip.data
@@ -579,14 +576,14 @@ class MedtronicGui(QtWidgets.QMainWindow):
             self.zero_crossings()
 
             self.peaks_zero_crossings()
-            self.bipecg_peak_plt.setData(y=bip_ecg[self.bip_peaks], x=self.bip_peaks,
+            self.ecg_peak_plt.setData(y=bip_ecg[self.bip_peaks], x=self.bip_peaks,
                                             pen=None, symbol='o', size=4, pxMode=True,
                                             antialise=True, autoDownsample=False, downsampleMethod='peak',
                                             clipToView=False)
 
 
         elif self.rect_combo.currentIndex() == 4:
-            bip_ecg = self.laser_exp.bipecg.data
+            bip_ecg = self.laser_exp.ecg.data
             ecg3 = self.laser_exp.ecg3.data
             rvshock = self.laser_exp.rvshock.data
             rvbip = self.laser_exp.rvbip.data
@@ -596,7 +593,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
             self.derivatives()
             self.zero_crossings()
             self.peaks_zero_crossings()
-            self.bipecg_peak_plt.setData(y=bip_ecg[self.filt_bip_peaks], x=self.filt_bip_peaks,
+            self.ecg_peak_plt.setData(y=bip_ecg[self.filt_bip_peaks], x=self.filt_bip_peaks,
                                          pen=None, symbol='o', size=4, pxMode=True,
                                          antialise=True, autoDownsample=False, downsampleMethod='peak',
                                          clipToView=False)
@@ -604,14 +601,14 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
         elif self.rect_combo.currentIndex() == 5:
             self.sq_rectifier()
-            bip_ecg = self.sqrect_bipecg
+            bip_ecg = self.sqrect_ecg
             ecg3 = self.sqrect_ecg3
             rvshock = self.sqrect_rvshock
             rvbip = self.sqrect_rvbip
             ra = self.sqrect_ralead
             lv = self.sqrect_lvlead
 
-        self.bipecg_plt.setData(x=np.arange(samples), y=bip_ecg, pen='02B83A', symbol=None,
+        self.ecg_plt.setData(x=np.arange(samples), y=bip_ecg, pen='02B83A', symbol=None,
                                 antialise=True,
                                 autoDownsample=True, clipToView=True)
         self.ecg3_plt.setData(x=np.arange(samples), y=ecg3, pen='#02B83A', antialise=True,
@@ -676,8 +673,8 @@ class MedtronicGui(QtWidgets.QMainWindow):
     # FIXING DATA
     def fix_lag(self):
         #     Correlate ECGs
-        corr = scipy.signal.correlate(self.laser_exp.rvshock.data, self.laser_exp.bipecg.data, mode="full")
-        lags = scipy.signal.correlation_lags(self.laser_exp.rvshock.data.size, self.laser_exp.bipecg.data.size,
+        corr = scipy.signal.correlate(self.laser_exp.rvshock.data, self.laser_exp.ecg.data, mode="full")
+        lags = scipy.signal.correlation_lags(self.laser_exp.rvshock.data.size, self.laser_exp.ecg.data.size,
                                              mode="full")
         lag = lags[np.argmax(corr)]
         print(f"Best lag: {lag}")
@@ -687,15 +684,15 @@ class MedtronicGui(QtWidgets.QMainWindow):
         if lag < 0:
             print(f"Removing {len(remove)} samples from ECG Dataset")
             self.laser_exp.ecg3.data = np.delete(self.laser_exp.ecg3.data, remove, axis=0)
-            self.laser_exp.bipecg.data = np.delete(self.laser_exp.bipecg.data, remove, axis=0)
+            self.laser_exp.ecg.data = np.delete(self.laser_exp.ecg.data, remove, axis=0)
             self.laser_exp.laser1.data = np.delete(self.laser_exp.laser1.data, remove, axis=0)
             self.laser_exp.laser2.data = np.delete(self.laser_exp.laser2.data, remove, axis=0)
             self.laser_exp.pressure.data = np.delete(self.laser_exp.pressure.data, remove, axis=0)
 
-            self.laser_exp.rvbip.data = self.laser_exp.rvbip.data[0:self.laser_exp.bipecg.data.size]
-            self.laser_exp.rvshock.data = self.laser_exp.rvshock.data[0:self.laser_exp.bipecg.data.size]
-            self.laser_exp.ralead.data = self.laser_exp.ralead.data[0:self.laser_exp.bipecg.data.size]
-            self.laser_exp.lvlead.data = self.laser_exp.lvlead.data[0:self.laser_exp.bipecg.data.size]
+            self.laser_exp.rvbip.data = self.laser_exp.rvbip.data[0:self.laser_exp.ecg.data.size]
+            self.laser_exp.rvshock.data = self.laser_exp.rvshock.data[0:self.laser_exp.ecg.data.size]
+            self.laser_exp.ralead.data = self.laser_exp.ralead.data[0:self.laser_exp.ecg.data.size]
+            self.laser_exp.lvlead.data = self.laser_exp.lvlead.data[0:self.laser_exp.ecg.data.size]
 
         else:
             print(f"Removing {len(remove)} samples from ICD Leads")
@@ -705,7 +702,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
             self.laser_exp.lvlead.data = np.delete(self.laser_exp.lvlead.data, remove, axis=0)
 
             self.laser_exp.ecg3.data = self.laser_exp.ecg3.data[0:self.laser_exp.rvshock.data.size]
-            self.laser_exp.bipecg.data = self.laser_exp.bipecg.data[0:self.laser_exp.rvshock.data.size]
+            self.laser_exp.ecg.data = self.laser_exp.ecg.data[0:self.laser_exp.rvshock.data.size]
             self.laser_exp.laser1.data = self.laser_exp.laser1.data[0:self.laser_exp.rvshock.data.size]
             self.laser_exp.laser2.data = self.laser_exp.laser2.data[0:self.laser_exp.rvshock.data.size]
             self.laser_exp.pressure.data = self.laser_exp.pressure.data[0:self.laser_exp.rvshock.data.size]
@@ -716,7 +713,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         new_length = int(sec * desired_fs)
         self.laser_exp.pressure.data = scipy.signal.resample(self.laser_exp.pressure.data, new_length)
         self.laser_exp.ecg3.data = scipy.signal.resample(self.laser_exp.ecg3.data, new_length)
-        self.laser_exp.bipecg.data = scipy.signal.resample(self.laser_exp.bipecg.data, new_length)
+        self.laser_exp.ecg.data = scipy.signal.resample(self.laser_exp.ecg.data, new_length)
         self.laser_exp.laser1.data = scipy.signal.resample(self.laser_exp.laser1.data, new_length)
         self.laser_exp.laser2.data = scipy.signal.resample(self.laser_exp.laser2.data, new_length)
         self.laser_exp.ralead.data = (scipy.signal.resample(self.laser_exp.ralead.data, new_length))
@@ -725,12 +722,12 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.laser_exp.lvlead.data = scipy.signal.resample(self.laser_exp.lvlead.data, new_length)
 
     def ecg_filter(self):
-        bipecg_d = self.laser_exp.bipecg.data
+        ecg_d = self.laser_exp.ecg.data
         ecg_sos = scipy.signal.butter(5, (0.5, 25), 'band', fs=512, output='sos')
         try:
-            self.laser_exp.ecg3.data = scipy.signal.sosfilt(ecg_sos, bipecg_d)
+            self.laser_exp.ecg3.data = scipy.signal.sosfilt(ecg_sos, ecg_d)
         except:
-            self.laser_exp.bipecg.data = scipy.signal.sosfilt(ecg_sos, self.laser_exp.ecg3.data)
+            self.laser_exp.ecg.data = scipy.signal.sosfilt(ecg_sos, self.laser_exp.ecg3.data)
 
     def amplifier(self):
         # Fixing Voltage on leads
@@ -753,7 +750,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
     def rectifier(self):
         # Rectifying the ECG
         self.rect_ecg3 = abs(self.laser_exp.ecg3.data)
-        self.rect_bipecg = abs(self.laser_exp.bipecg.data)
+        self.rect_ecg = abs(self.laser_exp.ecg.data)
         self.rect_ralead = abs(self.laser_exp.ralead.data)
         self.rect_rvbip = abs(self.laser_exp.rvbip.data)
         self.rect_rvshock = abs(self.laser_exp.rvshock.data)
@@ -765,7 +762,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.rectifier()
         # Rectifying the ECG
         self.sqrect_ecg3 = (self.rect_ecg3 ** 2)*10
-        self.sqrect_bipecg = (self.rect_bipecg ** 2)*10
+        self.sqrect_ecg = (self.rect_ecg ** 2)*10
         self.sqrect_ralead = (self.rect_ralead ** 2)*10
         self.sqrect_rvbip = (self.rect_rvbip ** 2)*10
         self.sqrect_rvshock = (self.rect_rvshock ** 2)*10
@@ -773,7 +770,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
 
     def derivatives(self):
         self.sq_rectifier()
-        self.gradient_bipecg = np.gradient(self.sqrect_bipecg)
+        self.gradient_ecg = np.gradient(self.sqrect_ecg)
         self.gradient_ecg3 = np.gradient(self.sqrect_ecg3)
         self.gradient_ralead = np.gradient(self.sqrect_ralead)
         self.gradient_rvbip = np.gradient(self.sqrect_rvbip)
@@ -783,7 +780,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
     def zero_crossings(self):
         self.derivatives()
         # Zero Crossings - This detects the point where the gradient changes sign
-        self.zero_cross_bipecg = np.where(np.diff(np.sign(self.gradient_bipecg)))[0]
+        self.zero_cross_ecg = np.where(np.diff(np.sign(self.gradient_ecg)))[0]
         self.zero_cross_ecg3 = np.where(np.diff(np.sign(self.gradient_ecg3)))[0]
         self.zero_cross_ralead = np.where(np.diff(np.sign(self.gradient_ralead)))[0]
         self.zero_cross_rvbip = np.where(np.diff(np.sign(self.gradient_rvbip)))[0]
@@ -795,12 +792,12 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.bip_peaks = []
         self.filt_bip_peaks = []
         try:
-            for crossing in self.zero_cross_bipecg:
-                peak_index = np.argmax(self.rect_bipecg[crossing-10:crossing+10]) + crossing
+            for crossing in self.zero_cross_ecg:
+                peak_index = np.argmax(self.rect_ecg[crossing-10:crossing+10]) + crossing
                 self.bip_peaks.append(peak_index)
 
                 for i in range(1, len(self.bip_peaks)):
-                    diff = np.gradient(self.laser_exp.bipecg.data[self.bip_peaks[i-1]:self.bip_peaks[i]])
+                    diff = np.gradient(self.laser_exp.ecg.data[self.bip_peaks[i-1]:self.bip_peaks[i]])
                     if np.max(np.abs(diff)) > 0:
                         self.filt_bip_peaks.append(self.bip_peaks[i])
                     print('filt bip peak', self.filt_bip_peaks)
@@ -843,7 +840,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.ralead_pw.plotItem.setXRange(minX, maxX, padding=0)
         self.rvshock_pw.plotItem.setXRange(minX, maxX, padding=0)
         self.lvlead_pw.plotItem.setXRange(minX, maxX, padding=0)
-        self.bipecg_pw.plotItem.setXRange(minX, maxX, padding=0)
+        self.ecg_pw.plotItem.setXRange(minX, maxX, padding=0)
         self.ecg3_pw.plotItem.setXRange(minX, maxX, padding=0)
         self.pressure_pw.plotItem.setXRange(minX, maxX, padding=0)
         self.laser1_pw.plotItem.setXRange(minX, maxX, padding=0)
@@ -873,11 +870,11 @@ class MedtronicGui(QtWidgets.QMainWindow):
         else:
             self.ecg3_pw.hide()
 
-    def bipecg_toggle_changed(self, state):
+    def ecg_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
-            self.bipecg_pw.show()
+            self.ecg_pw.show()
         else:
-            self.bipecg_pw.hide()
+            self.ecg_pw.hide()
 
     def bp_toggle_changed(self, state):
         if QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked:
@@ -1005,7 +1002,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
     #     roi_begin, roi_end = self.calc_region.getRegion()
     #     print(self.csv_input)
     #
-    #     header = ['Patient', 'File', 'Experiment', 'Period', 'Begin', 'End', 'BipECG', 'BP', 'Laser1', 'Laser2', 'ECG3',
+    #     header = ['Patient', 'File', 'Experiment', 'Period', 'Begin', 'End', 'ecg', 'BP', 'Laser1', 'Laser2', 'ECG3',
     #               'RVshock', 'Rvbip', 'LVlead', 'RAlead']
     #     file_lbl = str(self.laser_exp.zip_fl).split("Haem/")[-1]
     #     if self.csv_file != None:
@@ -1017,7 +1014,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
     #
     #         data = {'Patient': str(self.laser_exp.patient), 'File': str(file_lbl),
     #                 'Experiment': str(Exp), 'Period': str(self.time_stamp_label),
-    #                 'Begin': str(int(roi_begin)), 'End': str(int(roi_end)), 'BipECG': str(self.laser_exp.bipecg_source),
+    #                 'Begin': str(int(roi_begin)), 'End': str(int(roi_end)), 'ecg': str(self.laser_exp.ecg_source),
     #                 'BP': str(self.laser_exp.pressure_source), 'Laser1': str(self.laser_exp.laser1_source),
     #                 'Laser2': str(self.laser_exp.laser2_source),
     #                 'ECG3': str(self.laser_exp.ecg3_source), 'RVshock': str(self.laser_exp.rvshock_source),
@@ -1045,7 +1042,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
     #             data = {'Patient': str(self.laser_exp.patient), 'File': str(file_lbl),
     #                     'Experiment': Exp, 'Period': str(self.timestamp_lbl_text),
     #                     'Begin': str(int(roi_begin)), 'End': str(int(roi_end)),
-    #                     'BipECG': str(self.laser_exp.bipecg_source),
+    #                     'ecg': str(self.laser_exp.ecg_source),
     #                     'BP': str(self.laser_exp.pressure_source), 'Laser1': str(self.laser_exp.laser1_source),
     #                     'Laser2': str(self.laser_exp.laser2_source),
     #                     'ECG3': str(self.laser_exp.ecg3_source), 'RVshock': str(self.laser_exp.rvshock_source),
