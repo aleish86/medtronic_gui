@@ -93,15 +93,9 @@ class sensing(object):
             num_peaks = min(10, len(self.laser_exp.rvshock.peaks_sample))
             egm_peaks = np.array([self.laser_exp.rvshock.peaks_sample[0:num_peaks]])
 
-        # norm_ecg_signal = (ecg_signal - min(ecg_signal)) / (max(ecg_signal) - min(ecg_signal))
-        # norm_egm_signal = (egm_signal - min(egm_signal)) / (max(egm_signal) - min(egm_signal))
         peak_diff = np.subtract(ecg_peaks, egm_peaks)
         peak_diff_new = self.reject_outliers(peak_diff)
         time_diff = int(np.mean(peak_diff_new))
-        # corr = scipy.signal.correlate(norm_egm_signal, norm_ecg_signal, mode="full")
-        # lags = scipy.signal.correlation_lags(len(norm_egm_signal), len(norm_ecg_signal), mode="full")
-        # lag = lags[np.argmax(corr)]
-        # print(f"Best lag: {lag}")
 
         remove = np.arange(0, abs(time_diff), step=1)
 
@@ -124,52 +118,11 @@ class sensing(object):
                     self[string + '_corr'] = data_copy[0:length]
 
     def resample_data(self, original_fs, desired_fs):
-        sec = (self.laser_exp.ecg.data.size) / original_fs
-        new_length = int(sec * desired_fs)
-        self.resampled_bp_data = scipy.signal.resample(self.laser_exp.pressure.data, new_length)
-        self.resampled_ecg3_data = scipy.signal.resample(self.laser_exp.ecg3.data, new_length)
-        self.resampled_ecg_data = scipy.signal.resample(self.laser_exp.ecg.data, new_length)
-        self.resampled_laser1_data = scipy.signal.resample(self.laser_exp.laser1.data, new_length)
-        self.resampled_laser2_data = scipy.signal.resample(self.laser_exp.laser2.data, new_length)
-        self.resampled_ra_data = (scipy.signal.resample(self.laser_exp.ralead.data, new_length))
-        self.resampled_rv_data = scipy.signal.resample(self.laser_exp.rvbip.data, new_length)
-        self.resampled_shock_data = scipy.signal.resample(self.laser_exp.rvshock.data, new_length)
-        self.resampled_lv_data = scipy.signal.resample(self.laser_exp.lvlead.data, new_length)
-        self.laser1_data = self.resampled_laser1_data
-        self.laser2_data = self.resampled_laser2_data
-        self.bp_data = self.resampled_bp_data
-
-        # resampled_bp_data = scipy.signal.resample(self.laser_exp.pressure.data, new_length)
-        # resampled_ecg3_data = scipy.signal.resample(self.laser_exp.ecg3.data, new_length)
-        # resampled_ecg_data = scipy.signal.resample(self.laser_exp.ecg.data, new_length)
-        # resampled_laser1_data = scipy.signal.resample(self.laser_exp.laser1.data, new_length)
-        # resampled_laser2_data = scipy.signal.resample(self.laser_exp.laser2.data, new_length)
-        # resampled_ra_data = (scipy.signal.resample(self.laser_exp.ralead.data, new_length))
-        # resampled_rv_data = scipy.signal.resample(self.laser_exp.rvbip.data, new_length)
-        # resampled_shock_data = scipy.signal.resample(self.laser_exp.rvshock.data, new_length)
-        # resampled_lv_data = scipy.signal.resample(self.laser_exp.lvlead.data, new_length)
-
-        # log_bp_data = np.log(resampled_bp_data+10)
-        # log_ecg3_data = np.log(resampled_ecg3_data+10)
-        # log_ecg_data = np.log(resampled_ecg_data+10)
-        # log_laser1_data = np.log(resampled_laser1_data+10)
-        # log_laser2_data = np.log(resampled_laser2_data+10)
-        # log_ra_data = np.log(resampled_ra_data+10)
-        # log_rv_data = np.log(resampled_rv_data+10)
-        # log_shock_data = np.log(resampled_shock_data+10)
-        # log_lv_data = np.log(resampled_lv_data+10)
-        #
-        # scaler = MinMaxScaler(feature_range=(-1, 1))
-        # self.resampled_bp_data = scaler.fit_transform(log_bp_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_ecg3_data = scaler.fit_transform(log_ecg3_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_ecg_data = scaler.fit_transform(log_ecg_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_laser1_data = scaler.fit_transform(log_laser1_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_laser2_data = scaler.fit_transform(log_laser2_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_ra_data = scaler.fit_transform(log_ra_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_rv_data = scaler.fit_transform(log_rv_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_shock_data = scaler.fit_transform(log_shock_data.reshape(-1, 1)).reshape(-1)
-        # self.resampled_lv_data = scaler.fit_transform(log_lv_data.reshape(-1, 1)).reshape(-1)
-
+        for k in self.used_signals.keys():
+            string = k.lower()
+            sec = (self[string + '_corr'].size) / original_fs
+            new_length = int(sec * desired_fs)
+            self[string + '_resampled'] = scipy.signal.resample(self[string + '_corr'], new_length)
 
     def ecg_filter(self):
         ecg_sos = scipy.signal.butter(5, (0.5, 25), 'band', fs=512, output='sos')
