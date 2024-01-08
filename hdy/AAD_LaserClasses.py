@@ -106,19 +106,28 @@ class LaserAnalysis1(object):
                 self.data_source[key] = getattr(self.hints, key, "blank")
             except:
                 self.data_source[key] = "blank"
+            if isinstance(self.data_source[key], str) == False:
+                self.data_source[key] = 'blank'
+            print(key, self.data_source[key])
 
         self.data = {}
         ecg_containers = ['ECG','ECG3', 'RVshock', 'RVbip', 'LVlead', 'RAlead']
         laser_containers = ['Laser1', 'Laser2']
+
         for k, v in self.data_source.items():
+            print(k, v)
             if k in ecg_containers:
                 self.data[k] = DAQContainerECG(data = getattr(daq_raw, v, daq_raw.blank), sampling_rate=daq_raw.sampling_rate)
-
+                string = str(str(k).lower())
+                self[string] = self.data[k]
             if k in laser_containers:
                 self.data[k] = DAQContainerLaser(data = getattr(daq_raw, v, daq_raw.blank), sampling_rate=daq_raw.sampling_rate)
-
+                string = str(str(k).lower())
+                self[string] = self.data[k]
             if k == 'BP':
                 self.data[k] = DAQContainerBP(data = getattr(daq_raw, v, daq_raw.blank), sampling_rate=daq_raw.sampling_rate)
+                self.pressure = self.data[k]
+
 
 
     def __getitem__(self, key):
@@ -136,20 +145,17 @@ class LaserAnalysis1(object):
 
         ecg_hint = self.hints['Period']
         print(ecg_hint)
+        # Change here
 
-        self.bipecg.calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
+        if self.data_source['ECG']!= 'blank':
+            self.data['ECG'].calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
+        if self.data_source['RVbip']!= 'blank':
+            self.data['RVbip'].calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
 
         try:
-            self.pressure.calc_peaks(begin=begin, end=end)
-       #     self.ecg3.calc_peaks(begin=begin, end=end)
-       #     self.rvshock.calc_peaks(begin=begin, end=end)
-       #     self.rvbip.calc_peaks(begin=begin, end=end)
-       #     self.lvlead.calc_peaks(begin=begin, end=end)
-       #     self.ralead.calc_peaks(begin=begin, end=end)
-
-
-        except Exception as e:
-            print(e)
+            self.data['BP'].calc_peaks(begin=begin, end=end)
+        except:
+            self.data['Laser1'].calc_peaks(begin=begin, end=end)
 
         if True:
             self.calc_fft_results(begin=begin, end=end)
@@ -168,23 +174,44 @@ class LaserAnalysis1(object):
         self.results['Laser2_Mean'] = np.mean(self.laser2.data[begin:end])
         self.results['MAP_Mean'] = np.mean(self.pressure.data[begin:end])
         self.results['SBP_Mean'] = np.mean(self.pressure.peaks_value)
+        self.results['Laser1_Peak'] = np.mean(self.laser1.peaks_value)
+        self.results['Laser2_Peak'] = np.mean(self.laser2.peaks_value)
         self.results['Laser1_SJM'] = np.mean(envelope1_data)
         self.results['Laser2_SJM'] = np.mean(envelope2_data)
-        self.results['Median_RR (bip)'] = int(np.median(np.diff(self.rvbip.peaks_sample)))
-       # self.results['Median_RR (3)'] = int(np.median(np.diff(self.ecg3.peaks_sample)))
-       # self.results['Median_VV (RV Shock)'] = int(np.median(np.diff(self.rvshock.peaks_sample)))
-       # self.results['Median_VV (RV bip)'] = int(np.median(np.diff(self.rvbip.peaks_sample)))
-       # self.results['Median_VV (LV)'] = int(np.median(np.diff(self.lvlead.peaks_sample)))
-       # self.results['Median_AA (RA)'] = int(np.median(np.diff(self.ralead.peaks_sample)))
 
-        for i, sbp in enumerate(self.pressure.peaks_value):
-            self.results_beatbybeat['Patient'].append(self.patient)
-            self.results_beatbybeat['Experiment'].append(self.exp)
-            self.results_beatbybeat['File'].append(self.hints["File"])
-            self.results_beatbybeat['Period'].append(self.period)
-            self.results_beatbybeat['Notes'].append(self.notes)
-            self.results_beatbybeat["Beat"].append(i)
-            self.results_beatbybeat["SBP"].append(sbp)
+        if self.data_source['ECG']!= 'blank':
+            self.results['Median_RR (bip)'] = int(np.median(np.diff(self.bipecg.peaks_sample)))
+        if self.data_source['ECG3']!= 'blank':
+            self.results['Median_RR (3)'] = int(np.median(np.diff(self.ecg3.peaks_sample)))
+        if self.data_source['RVbip']!= 'blank':
+            self.results['Median_VV (RV bip)'] = int(np.median(np.diff(self.rvbip.peaks_sample)))
+        if self.data_source['RVshock']!= 'blank':
+            self.results['Median_VV (RV Shock)'] = int(np.median(np.diff(self.rvshock.peaks_sample)))
+        if self.data_source['LVlead']!= 'blank':
+            self.results['Median_AA (LV)'] = int(np.median(np.diff(self.lvlead.peaks_sample)))
+        if self.data_source['RAlead']!= 'blank':
+            self.results['Median_AA (RA)'] = int(np.median(np.diff(self.ralead.peaks_sample)))
+
+        try:
+            for i, (sbp, map, laser1, laser2, laser1peak, laser2peak) in enumerate(zip(self.pressure.peaks_value, self.pressure.map_beat,
+                                                               self.laser1_mean_laser_beat,
+                                                               self.laser2_mean_laser_beat, self.laser1.peaks_value, self.laser2.peaks_value)):
+                self.results_beatbybeat['Patient'].append(self.patient)
+                self.results_beatbybeat['Experiment'].append(self.exp)
+                self.results_beatbybeat['File'].append(self.hints["File"])
+                self.results_beatbybeat['Period'].append(self.period)
+                self.results_beatbybeat['Group'].append(self.group)
+                self.results_beatbybeat['Label'].append(self.label)
+                self.results_beatbybeat['Notes'].append(self.notes)
+                self.results_beatbybeat['Begin'].append(self.begin)
+                self.results_beatbybeat['End'].append(self.end)
+                self.results_beatbybeat["Beat"].append(i)
+                self.results_beatbybeat["SBP"].append(sbp)
+                self.results_beatbybeat["MAP"].append(map)
+                self.results_beatbybeat["Laser1_Mean"].append(laser1)
+                self.results_beatbybeat["Laser2_Mean"].append(laser2)
+                self.results_beatbybeat["Laser1_Peak"].append(laser1peak)
+                self.results_beatbybeat["Laser2_Peak"].append(laser2peak)
 
             pass
 
@@ -192,17 +219,29 @@ class LaserAnalysis1(object):
         self.results['Patient'] = self.patient
         self.results['Experiment'] = self.exp
         self.results['File'] = self.hints["File"]
+        self.results['Group'] = self.group
+        self.results['Label'] = self.label
         self.results['Period'] = self.period
         self.results['Notes'] = self.notes
+        self.results['Begin'] = self.begin
+        self.results['End'] = self.end
 
         self.results_beatbybeat['Patient'] = []
         self.results_beatbybeat['Experiment'] = []
         self.results_beatbybeat['File'] = []
         self.results_beatbybeat['Period'] = []
+        self.results_beatbybeat['Group'] = []
+        self.results_beatbybeat['Label'] = []
         self.results_beatbybeat['Notes'] = []
+        self.results_beatbybeat['Begin'] = []
+        self.results_beatbybeat['End'] = []
         self.results_beatbybeat['Beat'] = []
         self.results_beatbybeat["SBP"] = []
-
+        self.results_beatbybeat["MAP"] = []
+        self.results_beatbybeat["Laser1_Mean"] = []
+        self.results_beatbybeat["Laser2_Mean"] = []
+        self.results_beatbybeat["Laser1_Peak"] = []
+        self.results_beatbybeat["Laser2_Peak"] = []
 
     def calc_fft_results(self, begin=None, end=None):
         results = self.results
