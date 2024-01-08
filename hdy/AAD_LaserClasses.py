@@ -247,27 +247,15 @@ class LaserAnalysis1(object):
         results = self.results
 
         for k, v in self.data_source.items():
-            if v != 'blank' and k != 'BP':
-                string = str(str(k).lower())
+            if v != 'blank':
+
+                if k == 'BP':
+                    string = pressure
+                else:
+                    string = str(str(k).lower())
+
                 self[string].calc_fft(begin=begin, end=end, log=False, detrend=True)
                 fft_var = self[string].FFT
-                freq_var = fft_var.freqs
-                power_var = fft_var.power_rpt
-                peaks_var = scipy.signal.argrelmax(power_var, order=5)[0]
-
-                peak_freq_var = mmt.find_nearest_value(peaks_var, self.freq_hint)
-                peak_freq_idx_var = mmt.find_nearest_idx(freq_var, peak_freq_var)  # Change to np.where
-
-                self[string + '_fft_peak_freq'] = peak_freq_var
-                self[string + '_fft_peak_freq_idx'] = peak_freq_idx_var
-
-                results[string + '_Peak_Power'] = fft_var.power_rpt[peak_freq_idx_var]
-                results[string + '_Power'] = np.sum(fft_var.power_rpt[peak_freq_idx_var-2:peak_freq_idx_var+2])
-
-            if v != 'blank' and k == 'BP':
-                self.pressure.calc_fft(begin=begin, end=end, log=True, detrend=True)
-                string = 'pressure'
-                pressure_fft = self.pressure.FFT
                 freq_var = fft_var.freqs
                 power_var = fft_var.power_rpt
                 peaks_var = scipy.signal.argrelmax(power_var, order=5)[0]
@@ -284,14 +272,12 @@ class LaserAnalysis1(object):
             else:
                 pass
 
-
-
     def calc_magic_results(self, begin=None, end=None, laser="laser1"):
-
-        if begin == None:
-            ecg_peaks_sample = self.bipecg.peaks_sample
-        else:
-            ecg_peaks_sample = self.bipecg.peaks_sample - begin
+        if self.data_source['ECG'] != 'blank':
+            if begin == None:
+                ecg_peaks_sample = self.bipecg.peaks_sample
+            else:
+                ecg_peaks_sample = self.bipecg.peaks_sample - begin
 
         ecg_peaks_sample_raw = ecg_peaks_sample.copy()
 
