@@ -331,7 +331,28 @@ class DAQContainerLaser(DAQSignal):
 
         #self.data = data
         self.data = scipy.signal.savgol_filter(data, 101, 3)
+    def calc_peaks(self, begin=None, end=None, dpdt=False):
+        data = self.data[begin:end]
+        sampling_rate = self.sampling_rate
 
+        print("Calculating Laser Peaks")
+        if dpdt:
+            widths = np.arange(sampling_rate // 40, sampling_rate // 6, sampling_rate // 40)
+        else:
+            widths = np.arange(sampling_rate // 20, sampling_rate // 3, sampling_rate // 20)
+        widths = np.arange(2*(sampling_rate // 12), 6*(sampling_rate // 12), sampling_rate // 12)
+
+        peaks_sample = mmt.find_peaks.find_peaks_cwt_refined(data, widths, decimate=True, noise_perc=30)
+        print("Finished calculating Laser peaks")
+
+        if begin == None:
+            self.peaks_sample = peaks_sample
+        else:
+            self.peaks_sample = peaks_sample + begin
+
+    @property
+    def peaks_value(self):
+        return self.data[self.peaks_sample]
 class DAQContainerBoxA(DAQSignal):
     def __init__(self, scale=1,  *args, **kwds):
         super().__init__(scale=scale, *args, **kwds)
