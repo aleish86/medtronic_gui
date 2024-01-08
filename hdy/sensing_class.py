@@ -11,6 +11,7 @@ class sensing(object):
     def __init__(self, laser_exp:object, parent: object = None) -> object:
         self.laser_exp = laser_exp
         # Fixing and Correlating Data
+        self.fix_lag()
         self.resample_data(1000, 512)
         self.ecg_filter()
         self.amplifier()
@@ -43,7 +44,11 @@ class sensing(object):
         self.fix_lag()
         # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
         print("Sensing Class Initialized")
+    def __getitem__(self, key):
+        return getattr(self, key)
 
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
     def reject_outliers(self, data, m=2):
         return data[abs(data - np.mean(data)) < m * np.std(data)]
 
@@ -68,18 +73,22 @@ class sensing(object):
 
         if 'ECG' in self.used_signals.keys():
             ecg_signal = self.laser_exp.ecg.data[0:6000]
+            self.laser_exp.ecg.calc_ecg_peaks()
             num_peaks = min(10, len(self.laser_exp.ecg.peaks_sample))
             ecg_peaks = np.array([self.laser_exp.ecg.peaks_sample[0:num_peaks]])
         else:
             ecg_signal = self.laser_exp.ecg3.data[0:6000]
+            self.laser_exp.ecg3.calc_ecg_peaks()
             num_peaks = min(10, len(self.laser_exp.ecg3.peaks_sample))
             ecg_peaks = np.array([self.laser_exp.ecg3.peaks_sample[0:num_peaks]])
 
         if 'RVbip' in self.used_signals.keys():
+            self.laser_exp.rvbip.calc_ecg_peaks()
             egm_signal = self.laser_exp.rvbip.data
             num_peaks = min(10, len(self.laser_exp.rvbip.peaks_sample))
             egm_peaks = np.array([self.laser_exp.rvbip.peaks_sample[0:num_peaks]])
         else:
+            self.laser_exp.rvshock.calc_ecg_peaks()
             egm_signal = self.laser_exp.rvshock.data
             num_peaks = min(10, len(self.laser_exp.rvshock.peaks_sample))
             egm_peaks = np.array([self.laser_exp.rvshock.peaks_sample[0:num_peaks]])
@@ -88,7 +97,7 @@ class sensing(object):
         # norm_egm_signal = (egm_signal - min(egm_signal)) / (max(egm_signal) - min(egm_signal))
         peak_diff = np.subtract(ecg_peaks, egm_peaks)
         peak_diff_new = self.reject_outliers(peak_diff)
-        time_diff = round(np.mean(peak_diff_new),0)
+        time_diff = int(np.mean(peak_diff_new))
         # corr = scipy.signal.correlate(norm_egm_signal, norm_ecg_signal, mode="full")
         # lags = scipy.signal.correlation_lags(len(norm_egm_signal), len(norm_ecg_signal), mode="full")
         # lag = lags[np.argmax(corr)]
@@ -96,21 +105,22 @@ class sensing(object):
 
         remove = np.arange(0, abs(time_diff), step=1)
 
-        if lag < 0:
+        if time_diff < 0:
             print(f"Problem. Should not be removing {len(remove)} samples from ECG Dataset")
 
         else:
             print(f"Removing {len(remove)} samples from ICD Leads")
             egms = ['RVbip', 'RVshock', 'RAlead', 'LVlead']
             for k in self.used_signals.keys():
-                string = str(str(k).lower())
+                string = k.lower()
                 data_copy = self.laser_exp.data[k].data.copy()
 
                 if k in egms:
                     self[string + '_corr'] = np.delete(data_copy, remove, axis=0)
 
                 else:
-                    length = len(egm_signal)
+                    temp_d = egm_signal[time_diff::]
+                    length = len(temp_d)
                     self[string + '_corr'] = data_copy[0:length]
 
     def resample_data(self, original_fs, desired_fs):
