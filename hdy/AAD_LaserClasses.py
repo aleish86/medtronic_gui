@@ -23,6 +23,10 @@ import mmt
 from . import *
 
 PR_DELAY = 120
+from collections import namedtuple
+
+MagicResults = namedtuple('MagicResults',
+                          ['max_idx', 'min_idx', 'magic_data_all', 'magic_data', 'magic_value', 'conf_value'])
 
 class BSplineFeatures(sklearn.base.TransformerMixin):
     def __init__(self, knots, degree=3, periodic=False):
@@ -298,6 +302,10 @@ class LaserAnalysis1(object):
                 ecg_peaks_sample = self.ecg3.peaks_sample - begin
 
         else:
+            if begin == None:
+                ecg_peaks_sample = self.laser1.peaks_sample
+            else:
+                ecg_peaks_sample = self.laser1.peaks_sample - begin
             print("No ECG data found")
 
 
@@ -496,20 +504,37 @@ class LaserAnalysis1(object):
 
         laser_magic_value = 100 * (np.exp((laser_ptp) / 2) - 1)
 
-        from collections import namedtuple
+            if laser_max_idx != 0:
+                if laser_max_idx > laser_min_idx:
+                    laser_slope = np.max(abs(np.gradient(laser_magic[laser_min_idx:laser_max_idx])))
+                else:
+                    laser_slope = np.max(abs(np.gradient(laser_magic[laser_max_idx:laser_min_idx])))
 
-        MagicResults = namedtuple('MagicResults', ['max_idx', 'min_idx', 'magic_data_all', 'magic_data', 'magic_value', 'conf_value'])
+                # if np.isinf(laser_slope):
+                #     laser_slope = 0
+            else:
+                laser_slope = 0
+            laser_slope = laser_slope * 1000
 
-        print(f"Laser Value{laser_ptp}, Laser Conf{conf_pct}")
+            print(f"Laser Magic Value{laser_magic_value}, Laser ptp{laser_ptp}, Laser Conf{conf_pct}")
 
-        out = MagicResults(max_idx = laser_min_idx,
-                           min_idx = laser_min_idx,
-                           magic_data_all = laser_ar,
-                           magic_data = laser_magic,
-                           magic_value = laser_magic_value,
-                           conf_value = conf_pct)
+            out = MagicResults(max_idx=laser_max_idx,
+                               min_idx=laser_min_idx,
+                               magic_data_all=laser_ar,
+                               magic_data=laser_magic,
+                               magic_value=laser_magic_value,
+                               conf_value=conf_pct,
+                               delay=shift,
+                               slope=laser_slope)
+        except Exception:
+            logging.exception(f"Problem in calc_laser_magic")
+            out = MagicResults(max_idx=None,
+                               min_idx=None,
+                               magic_data_all=None,
+                               magic_data=None,
+                               magic_value=None,
+                               conf_value=None,
+                               delay=None,
+                               slope=None)
 
         return out
-
-
-
