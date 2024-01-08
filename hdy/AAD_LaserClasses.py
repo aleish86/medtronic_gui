@@ -246,57 +246,45 @@ class LaserAnalysis1(object):
     def calc_fft_results(self, begin=None, end=None):
         results = self.results
 
-        self.bipecg.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.ecg3.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.rvshock.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.rvbip.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.ralead.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.lvlead.calc_fft(begin=begin, end=end, log=False, detrend=True)
-        self.pressure.calc_fft(begin=begin, end=end, log=True, detrend=True)
-        self.laser1.calc_fft(begin=begin, end=end, log=True, detrend=True)
-        self.laser2.calc_fft(begin=begin, end=end, log=True, detrend=True)
+        for k, v in self.data_source.items():
+            if v != 'blank' and k != 'BP':
+                string = str(str(k).lower())
+                self[string].calc_fft(begin=begin, end=end, log=False, detrend=True)
+                fft_var = self[string].FFT
+                freq_var = fft_var.freqs
+                power_var = fft_var.power_rpt
+                peaks_var = scipy.signal.argrelmax(power_var, order=5)[0]
 
-        bipecg_fft = self.bipecg.FFT
-        pressure_fft = self.pressure.FFT
-        ecg3_fft = self.ecg3.FFT
-        rvshock_fft = self.rvshock.FFT
-        rvbip_fft = self.rvbip.FFT
-        lvlead_fft = self.lvlead.FFT
-        ralead_fft = self.ralead.FFT
-        laser1_fft = self.laser1.FFT
-        laser2_fft = self.laser2.FFT
+                peak_freq_var = mmt.find_nearest_value(peaks_var, self.freq_hint)
+                peak_freq_idx_var = mmt.find_nearest_idx(freq_var, peak_freq_var)  # Change to np.where
 
-        rvbip_fft_freqs = rvbip_fft.freqs
-        rvbip_fft_power = rvbip_fft.power_rpt
+                self[string + '_fft_peak_freq'] = peak_freq_var
+                self[string + '_fft_peak_freq_idx'] = peak_freq_idx_var
 
-        rvbip_fft_peaks = scipy.signal.find_peaks_cwt(rvbip_fft_power, widths = np.array([1,2,3,4,5,6,7,8,9,10]), noise_perc=10)
-        rvbip_fft_peaks = scipy.signal.argrelmax(rvbip_fft_power, order=5)[0]
+                results[string + '_Peak_Power'] = fft_var.power_rpt[peak_freq_idx_var]
+                results[string + '_Power'] = np.sum(fft_var.power_rpt[peak_freq_idx_var-2:peak_freq_idx_var+2])
 
-        rvbip_fft_peak_freq = mmt.find_nearest_value(rvbip_fft_freqs[rvbip_fft_peaks], self.freq_hint)
-        rvbip_fft_peak_freq_idx = mmt.find_nearest_idx(rvbip_fft_freqs, rvbip_fft_peak_freq) #Change to np.where
+            if v != 'blank' and k == 'BP':
+                self.pressure.calc_fft(begin=begin, end=end, log=True, detrend=True)
+                string = 'pressure'
+                pressure_fft = self.pressure.FFT
+                freq_var = fft_var.freqs
+                power_var = fft_var.power_rpt
+                peaks_var = scipy.signal.argrelmax(power_var, order=5)[0]
 
-        self.rvbip_fft_peak_freq = rvbip_fft_peak_freq
-        self.rvbip_fft_peak_freq_idx = rvbip_fft_peak_freq_idx
+                peak_freq_var = mmt.find_nearest_value(peaks_var, self.freq_hint)
+                peak_freq_idx_var = mmt.find_nearest_idx(freq_var, peak_freq_var)  # Change to np.where
 
-        results['ECG_Peak_Power'] = rvbip_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        results['Fino_Peak_Power'] = pressure_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        results['ECG3_Peak_Power'] = ecg3_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['RVshock_Peak_Power'] = rvshock_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['BipECG_Peak_Power'] = bipecg_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['LV_Peak_Power'] = lvlead_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['RA_Peak_Power'] = ralead_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['Laser1_Peak_Power'] = laser1_fft.power_rpt[rvbip_fft_peak_freq_idx]
-        # results['Laser2_Peak_Power'] = laser2_fft.power_rpt[rvbip_fft_peak_freq_idx]
+                self[string + '_fft_peak_freq'] = peak_freq_var
+                self[string + '_fft_peak_freq_idx'] = peak_freq_idx_var
 
-        results['ECG_Power'] = np.sum(rvbip_fft.power_rpt[rvbip_fft_peak_freq_idx-1:rvbip_fft_peak_freq_idx+2])
-        results['ECG3_Power'] = np.sum(ecg3_fft.power_rpt[rvbip_fft_peak_freq_idx - 1:rvbip_fft_peak_freq_idx + 2])
-        results['RVshock_Power'] = np.sum(rvshock_fft.power_rpt[rvbip_fft_peak_freq_idx - 1:rvbip_fft_peak_freq_idx + 2])
-        # results['BipECG_Power'] = np.sum(bipecg_fft.power_rpt[rvbip_fft_peak_freq_idx - 1:rvbip_fft_peak_freq_idx + 2])
-        # results['LV_Power'] = np.sum(lvlead_fft.power_rpt[rvbip_fft_peak_freq_idx - 1:rvbip_fft_peak_freq_idx + 2])
-        # results['RA_Power'] = np.sum(ralead_fft.power_rpt[rvbip_fft_peak_freq_idx - 1:rvbip_fft_peak_freq_idx + 2])
-        # results['Fino_Power'] = np.sum(pressure_fft.power_rpt[rvbip_fft_peak_freq_idx-1:rvbip_fft_peak_freq_idx+2])
-        # results['Laser1_Power'] = np.sum(laser1_fft.power_rpt[rvbip_fft_peak_freq_idx-1:rvbip_fft_peak_freq_idx+2])
-        # results['Laser2_Power'] = np.sum(laser2_fft.power_rpt[rvbip_fft_peak_freq_idx-1:rvbip_fft_peak_freq_idx+2])
+                results[string + '_Peak_Power'] = fft_var.power_rpt[peak_freq_idx_var]
+                results[string + '_Power'] = np.sum(fft_var.power_rpt[peak_freq_idx_var-2:peak_freq_idx_var+2])
+
+            else:
+                pass
+
+
 
     def calc_magic_results(self, begin=None, end=None, laser="laser1"):
 
