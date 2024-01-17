@@ -49,7 +49,6 @@ class sensing(object):
         self.filt_laser2_peaks = []
 
         self.zero_crossings()
-        self.peaks_zero_crossings()
         self.find_peaks(self.rvbip_rect, 120, 0.3, 75, 512, 1000)
         self.fix_lag()
         # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
@@ -210,72 +209,15 @@ class sensing(object):
             if k in cardiac_signal:
                 string = k.lower()
                 self[string + '_zerocross'] = []
-                for peak in max_peaks[0:5]:
+                for peak in max_peaks:
                     # Zero Crossings - This detects the point where the gradient changes sign
-                    zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][max(0, peak - 60):min(peak + 60, len(self[string + '_gradient']))])))
-                    new_list = np.abs(list - peak).argmin()
-                    closest_zero = new_list + max(0, peak - 60)
-                    self[string + '_zerocross'].append(closest_zero)
-
-    def peaks_zero_crossings(self):
-        self.zero_crossings()
-        items = ['ecg', 'ecg3', 'ralead', 'rvbip', 'rvshock', 'lvlead', 'laser1', 'laser2']
-        for item in items:
-            try:
-                prev_crossing = None
-                for crossing in getattr(self, 'zero_cross_' + item):
-                    if prev_crossing is None or crossing - prev_crossing > 62:  # 1000/512 = 1.95, therefore 120/1.95 = 61.5
-                        peak_index = np.argmax(getattr(self, 'sqrect_' + item)[crossing - 75:crossing + 75]) + prev_crossing
-                        getattr(self, item + '_peaks').append(peak_index)
-                        prev_crossing = crossing
-
-                for i in range(1, len(getattr(self, item + '_peaks'))):
-                    diff = np.gradient(getattr(self, 'sqrect_' + item).data[getattr(self, item + '_peaks')[i - 1]:getattr(self, item + '_peaks')[i]])
-                    if np.max(np.abs(diff)) > 0:
-                        getattr(self, 'filt_' + item + '_peaks').append(getattr(self, item + '_peaks')[i])
-                print('filt' + item +  'peak', getattr(self, 'filt_' + item + '_peaks'))
-            except:
-                continue
-
-        # prev_crossing = None
-        # for k in self.used_signals.keys():
-        #     if k in cardiac_signal:
-        #         string = k.lower()
-        #         self[string + 'peaks'] = []
-        #         for idx in np.ravel(self[string + '_zerocross']):
-        #             if prev_crossing is None:
-        #                 peak_index = np.argmax(self[string + '_sqrect'][max(idx - 200, 0):idx + 200]) + idx
-        #                 self[string + 'peaks'].append(peak_index)
-        #                 prev_crossing = idx
-        #             if prev_crossing is not None and ((idx - prev_crossing) > 65):
-        #                 peak_index = np.argmax(self[string + '_sqrect'][max(idx - 200, 0):idx + 200]) + prev_crossing
-        #                 self[string + 'peaks'].append(peak_index)
-        #                 prev_crossing = idx
-        #             else:
-        #                 pass
-    # def find_thresh_peaks(self, data, pvsb, threshold, sampling_freq):
-    #     pvsb = int(pvsb * (sampling_freq / 1000))
-    #     thresh_peaks = []
-    #     last_peak_index = 0
-    #     for i, sample in enumerate(data):
-    #         if sample > threshold:
-    #             if last_peak_index==0 or ((i - last_peak_index) >= pvsb):
-    #                 thresh_peaks.append(i)
-    #                 last_peak_index = i
-    #     return thresh_peaks
-    #
-    # def find_max_peaks(self, data, thresh_peaks, half_win_size_ms, sampling_freq, med_rr):
-    #     if half_win_size_ms > med_rr:
-    #         half_win_size_ms = int(med_rr/2)
-    #     win_size = int(half_win_size_ms * (sampling_freq / 1000))
-    #
-    #     max_peaks = []
-    #     for peak in thresh_peaks:
-    #         min_win = max(0, peak - win_size)
-    #         max_win = min(peak + win_size, len(data))
-    #         max_peak = np.argmax(data[min_win:max_win]) + min_win
-    #         max_peaks.append(max_peak)
-    #     return max_peaks
+                    start = max(0, peak - 30)
+                    end = min(peak + 30, len(self[string + '_gradient']))
+                    zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][start:end])))
+                    if len(zerocross[0]) > 0:
+                        new_list = np.abs(zerocross - peak).argmin()
+                        closest_zero = min(new_list + start, end)
+                        self[string + '_zerocross'].append(closest_zero)
 
     def exp_decay_plot(self, start_thresh, xdata, rvst): #This is the correct one
         ylist = []
