@@ -90,6 +90,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.icd_memory['active_tachy'] = False
         
         self.sensing = hdy.sensing(self.laser_exp)
+        # self.sensing.
 
         self.medtronic_vvi_gui()
         self.setup_m_vvi_plots()
@@ -471,9 +472,9 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.rvbip.data,
         #                                                                self.icd_mdt_parameters['rvst_value'],
         #                                                                self.icd_mdt_parameters['pvsb_value'])
-        self.max_x_list, self.rr_list = data_list(self.laser_exp.rvbip.data,
-                                                                       self.icd_mdt_parameters['rvst_value'],
-                                                                       self.icd_mdt_parameters['pvsb_value'])
+        # self.max_x_list, self.rr_list = data_list(self.laser_exp.rvbip.data,
+        #                                                                self.icd_mdt_parameters['rvst_value'],
+        #                                                                self.icd_mdt_parameters['pvsb_value'])
         # Setting up the Final Layout
         self.setLayout(self.m_vvi_main_layout)
 

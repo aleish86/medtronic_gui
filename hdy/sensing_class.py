@@ -27,6 +27,7 @@ class sensing(object):
         self.rectifier()
         self.sq_rectifier()
         self.derivatives()
+        self.icd_memory = {}
         self.icd_memory['low_sens'] = deque(maxlen=16)
         self.icd_memory['high_sens'] = deque(maxlen=36)
         self.ecg_peaks = []
@@ -285,14 +286,15 @@ class sensing(object):
         start_thresh = rvst
         pvsb = int(pvsb * (sampling_freq / 1000))
         peak_vals = []
-        last_peak_index = 0
+        last_peak_index = None
 
         # time = 480 * (sampling_freq/1000) # 480ms
         # decay_rate = 1/ (312*(sampling_freq/1000)) # 1 mV per 312ms
+        next_peak = []
         max_peaks = []
         for i, peak_value in enumerate(data):
             if peak_value > rvst:
-                if last_peak_index==0 or ((i - last_peak_index) >= pvsb):
+                if (last_peak_index is None) or ((i - last_peak_index) >= pvsb):
                     min_win = max(0, i - win_size)
                     max_win = min(i + win_size, len(data))
 
@@ -322,20 +324,24 @@ class sensing(object):
 
                     start = last_peak_index + int(120 * 0.512)
                     exp_decay = self.exp_decay_plot(start_thresh, np.arange(0, max_win-start), rvst)
+
                     for j, val in enumerate(exp_decay):
                         if data[i] > val:
-                            continue
+                            peak = j+start
+                            next_peak.append(peak)
+                            print('Peak found near ' + str(peak))
+                            break
 
                     if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] <=0.6:
                         self.icd_mdt_parameters['rvst_value'] = max(self.icd_mdt_parameters['rvst_value'] - 0.15, 0.15)
                         self.icd_memory['low_sens'] = deque(maxlen=16)
-                    if len(self.icd_memory['low_sens'])==16 and self.icd_memory['low_sens'].all()==-1 and self.icd_mdt_parameters['rvst_value'] >0.6:
+                    if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] >0.6:
                         self.icd_mdt_parameters['rvst_value'] = self.icd_mdt_parameters['rvst_value'] - 0.3
                         self.icd_memory['low_sens'] = deque(maxlen=16)
-                    if len(self.icd_memory['high_sense'])==36 and self.icd_memory['high_sense'].all()==1 and self.icd_mdt_parameters['rvst_value'] < 0.6:
+                    if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] < 0.6:
                         self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.15, 0.6)
                         self.icd_memory['high_sense'] = deque(maxlen=36)
-                    if len(self.icd_memory['high_sense'])==36 and self.icd_memory['high_sense'].all()==1 and self.icd_mdt_parameters['rvst_value'] >= 0.6:
+                    if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] >= 0.6:
                         self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.3, 1.8)
                         self.icd_memory['high_sense'] = deque(maxlen=36)
 
