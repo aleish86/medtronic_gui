@@ -1,6 +1,7 @@
 import scipy
 from scipy import signal
 import numpy as np
+from collections import deque
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 import os
@@ -19,15 +20,15 @@ class sensing(object):
                 pass
 
         # Fixing and Correlating Data
-        self.resample_data(1000, 512)
         self.fix_lag()
+        self.resample_data(1000, 512)
         self.ecg_filter()
-        self.amplifier()
         # Filtering ECGs
         self.rectifier()
         self.sq_rectifier()
         self.derivatives()
-
+        self.icd_memory['low_sens'] = deque(maxlen=16)
+        self.icd_memory['high_sens'] = deque(maxlen=36)
         self.ecg_peaks = []
         self.ecg3_peaks = []
         self.ralead_peaks = []
@@ -48,7 +49,7 @@ class sensing(object):
 
         self.zero_crossings()
         self.peaks_zero_crossings()
-
+        self.find_peaks(self.rvbip_rect, 120, 0.3, 75, 512, 1000)
         self.fix_lag()
         # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
         print("Sensing Class Initialized")
@@ -122,7 +123,7 @@ class sensing(object):
                     if mean_egm_peak < mean_ecg_peak:
                         factor = mean_ecg_peak / mean_egm_peak
                         data_copy = data_copy * factor
-                    if ecg_peaks[0] < egm_peaks[0]:
+                    if ecg_peaks[0][0] < egm_peaks[0][0]:
                         self[string + '_corr'] = np.delete(data_copy, remove, axis=0)
                     else:
                         self[string + '_corr'] = data_copy[:length]
@@ -132,13 +133,13 @@ class sensing(object):
                     if mean_ecg_peak < mean_egm_peak:
                         factor = mean_egm_peak / mean_ecg_peak
                         data_copy = data_copy * factor
-                    if ecg_peaks[0] > egm_peaks[0]:
+                    if ecg_peaks[0][0] > egm_peaks[0][0]:
                         self[string + '_corr'] = data_copy[time_diff:len(data_copy)]
                     else:
                         self[string + '_corr'] = data_copy[0:length]
 
                 else:
-                    if ecg_peaks[0] > egm_peaks[0]:
+                    if ecg_peaks[0][0] < egm_peaks[0][0]:
                         self[string + '_corr'] = data_copy[time_diff:len(data_copy)]
                     else:
                         self[string + '_corr'] = data_copy[0:length]
@@ -153,68 +154,62 @@ class sensing(object):
             if k in cardiac_signal:
                 self[string + '_resampled_norm'] = self[string + '_resampled'] - min(self[string + '_resampled']) / (np.max(self[string + '_resampled']) - min(self[string + '_resampled']))
                 self[string + '_resampled_norm'] = self[string + '_resampled_norm'] - np.mean(self[string + '_resampled_norm'])
-        # norm_ecg_signal = (ecg_signal - min(ecg_signal)) / (max(ecg_signal) - min(ecg_signal))
-        # norm_egm_signal = (egm_signal - min(egm_signal)) / (max(egm_signal) - min(egm_signal))
+
 
     def ecg_filter(self):
         ecg_sos = scipy.signal.butter(5, (0.5, 25), 'band', fs=512, output='sos')
-        self.ecg_data = scipy.signal.sosfilt(ecg_sos, self.resampled_ecg_data)
-        self.ecg3_data = scipy.signal.sosfilt(ecg_sos, self.resampled_ecg3_data)
+        for k in self.used_signals.keys():
+            if k in ['ECG', 'ECG3']:
+                string = k.lower()
+                self[string + '_filt'] = scipy.signal.sosfilt(ecg_sos, self[string + '_resampled_norm'])
 
-    def amplifier(self):
-        # Fixing Voltage on leads
-        self.ra_data = self.resampled_ra_data * 10
-        self.rvbip_data  = self.resampled_rv_data * 10
-        self.rvshock_data = self.resampled_shock_data * 10
-        self.lv_data = self.resampled_lv_data * 10
-        self.ecg_data = self.ecg_data * 3
-        self.ecg3_data = self.ecg3_data * 3
+    # def amplifier(self):
+    #     # Fixing Voltage on leads
+    #     self.ra_data = self.resampled_ra_data * 10
+    #     self.rvbip_data  = self.resampled_rv_data * 10
+    #     self.rvshock_data = self.resampled_shock_data * 10
+    #     self.lv_data = self.resampled_lv_data * 10
+    #     self.ecg_data = self.ecg_data * 3
+    #     self.ecg3_data = self.ecg3_data * 3
 
     def rectifier(self):
         # Rectifying the ECG
-        self.rect_ecg3 = abs(self.ecg3_data)
-        self.rect_ecg = abs(self.ecg_data)
-        self.rect_ralead = abs(self.ra_data)
-        self.rect_rvbip = abs(self.rvbip_data)
-        self.rect_rvshock = abs(self.rvshock_data)
-        self.rect_lvlead = abs(self.lv_data)
-        self.rect_laser1 = abs(self.resampled_laser1_data)
-        self.rect_laser2 = abs(self.resampled_laser2_data)
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
+        for k in self.used_signals.keys():
+            if k in cardiac_signal:
+                string = k.lower()
+                if k in ['ECG', 'ECG3']:
+                    self[string + '_rect'] = abs(self[string + '_filt'])
+                else:
+                    self[string + '_rect'] = abs(self[string + '_resampled_norm'])
 
     def sq_rectifier(self):
         self.rectifier()
         # Rectifying the ECG
-        self.sqrect_ecg3 = (self.rect_ecg3 ** 2) * 10
-        self.sqrect_ecg = (self.rect_ecg ** 2) * 10
-        self.sqrect_ralead = (self.rect_ralead ** 2) * 10
-        self.sqrect_rvbip = (self.rect_rvbip ** 2) * 10
-        self.sqrect_rvshock = (self.rect_rvshock ** 2) * 10
-        self.sqrect_lvlead = (self.rect_lvlead ** 2) * 10
-        self.sqrect_laser1 = (self.rect_laser1 ** 2) * 10
-        self.sqrect_laser2 = (self.rect_laser2 ** 2) * 10
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
+        for k in self.used_signals.keys():
+            if k in cardiac_signal:
+                string = k.lower()
+
+                self[string + '_sqrect'] = (self[string + '_rect'] ** 2) * 10
 
     def derivatives(self):
         self.sq_rectifier()
-        self.gradient_ecg = np.gradient(self.sqrect_ecg)
-        self.gradient_ecg3 = np.gradient(self.sqrect_ecg3)
-        self.gradient_ralead = np.gradient(self.sqrect_ralead)
-        self.gradient_rvbip = np.gradient(self.sqrect_rvbip)
-        self.gradient_rvshock = np.gradient(self.sqrect_rvshock)
-        self.gradient_lvlead = np.gradient(self.sqrect_lvlead)
-        self.gradient_laser1 = np.gradient(self.sqrect_laser1)
-        self.gradient_laser2 = np.gradient(self.sqrect_laser2)
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
+        for k in self.used_signals.keys():
+            if k in cardiac_signal:
+                string = k.lower()
+
+                self[string + '_gradient'] = np.gradient(self[string + '_sqrect'])
 
     def zero_crossings(self):
         self.derivatives()
-        # Zero Crossings - This detects the point where the gradient changes sign
-        self.zero_cross_ecg = np.where(np.diff(np.sign(self.gradient_ecg)))[0]
-        self.zero_cross_ecg3 = np.where(np.diff(np.sign(self.gradient_ecg3)))[0]
-        self.zero_cross_ralead = np.where(np.diff(np.sign(self.gradient_ralead)))[0]
-        self.zero_cross_rvbip = np.where(np.diff(np.sign(self.gradient_rvbip)))[0]
-        self.zero_cross_rvshock = np.where(np.diff(np.sign(self.gradient_rvshock)))[0]
-        self.zero_cross_lvlead = np.where(np.diff(np.sign(self.gradient_lvlead)))[0]
-        self.zero_cross_laser1 = np.where(np.diff(np.sign(self.gradient_laser1)))[0]
-        self.zero_cross_laser2 = np.where(np.diff(np.sign(self.gradient_laser2)))[0]
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
+        for k in self.used_signals.keys():
+            if k in cardiac_signal:
+                string = k.lower()
+                # Zero Crossings - This detects the point where the gradient changes sign
+                self[string + '_zerocross'] = np.where(np.diff(np.sign(self[string + '_gradient'])))
 
     def peaks_zero_crossings(self):
         self.zero_crossings()
@@ -224,7 +219,7 @@ class sensing(object):
                 prev_crossing = None
                 for crossing in getattr(self, 'zero_cross_' + item):
                     if prev_crossing is None or crossing - prev_crossing > 62:  # 1000/512 = 1.95, therefore 120/1.95 = 61.5
-                        peak_index = np.argmax(getattr(self, 'sqrect_' + item)[crossing - 75:crossing + 75]) + crossing
+                        peak_index = np.argmax(getattr(self, 'sqrect_' + item)[crossing - 75:crossing + 75]) + prev_crossing
                         getattr(self, item + '_peaks').append(peak_index)
                         prev_crossing = crossing
 
@@ -236,62 +231,112 @@ class sensing(object):
             except:
                 continue
 
-    def peak_adaptive_threshold(self, ecg_data, window_size, threshold, pvsb, factor):
-        detected_peaks = []
-
-        last_peak_index = 0
-        for i, sample in enumerate(ecg_data):
-            if sample > threshold:
-                if ((i - last_peak_index) >= pvsb):
-                    detected_peaks.append(i)
-                    last_peak_index = i
-            if i >= window_size:
-                window_start = i - window_size
-                window_end = i
-                window_mean = np.mean(ecg_data[window_start:window_end])
-                threshold = window_mean * factor
-        return detected_peaks
-
-    # def adaptive_threshold(self):
-    #     time = 480 #ms
-    #     rate = 1 mV per 312 ms = 3.125 hz
-    #     last_rpeak_value * (e**(-3.125*(t/480)))
-
-# def data_list(data, rv_sens_threshold, post_vs_blanking):
-#     # def data_list(data):
-#     max_index_list = []
-#     amplitude_list = []
-#     rr_list = []
-#     rpeaks = []
-#     post_vs_blanking = post_vs_blanking
-#     abs_data = abs(data)**2
-#
-#     icd_memory = {}
-#     icd_memory['last_r_peak'] = 0
-#
-#     rv_peaks = np.where(data > rv_sens_threshold)
-#     # rv_peaks = np.where(data > 0.3)
-#     rv_peaks = np.array(rv_peaks).flatten()
-#     print("rv_peaks: ", rv_peaks)
-#     for i, r_peak in enumerate(rv_peaks):
-    #     if i == 0:
-    #         last_rpeak = 0
-    #     else:
-    #         pass
-    #     if (r_peak - last_rpeak) > post_vs_blanking:
-    #         rpeaks.append(r_peak)
-    #     else:
-    #         pass
-    #     last_rpeak = r_peak
-    #     rpeaks = list(set(rpeaks))
-    # rpeaks = np.sort(rpeaks)
-    # time = 480  # ms
-    #     #     rate = 1 mV per 312 ms = 3.125 hz
-    # last_rpeak_value = rpeaks[0]
-    # peak_values = data[rpeaks]
-    # decay_rate = -3.125
-    # e = 2.71828
+        # prev_crossing = None
+        # for k in self.used_signals.keys():
+        #     if k in cardiac_signal:
+        #         string = k.lower()
+        #         self[string + 'peaks'] = []
+        #         for idx in np.ravel(self[string + '_zerocross']):
+        #             if prev_crossing is None:
+        #                 peak_index = np.argmax(self[string + '_sqrect'][max(idx - 200, 0):idx + 200]) + idx
+        #                 self[string + 'peaks'].append(peak_index)
+        #                 prev_crossing = idx
+        #             if prev_crossing is not None and ((idx - prev_crossing) > 65):
+        #                 peak_index = np.argmax(self[string + '_sqrect'][max(idx - 200, 0):idx + 200]) + prev_crossing
+        #                 self[string + 'peaks'].append(peak_index)
+        #                 prev_crossing = idx
+        #             else:
+        #                 pass
+    # def find_thresh_peaks(self, data, pvsb, threshold, sampling_freq):
+    #     pvsb = int(pvsb * (sampling_freq / 1000))
+    #     thresh_peaks = []
+    #     last_peak_index = 0
+    #     for i, sample in enumerate(data):
+    #         if sample > threshold:
+    #             if last_peak_index==0 or ((i - last_peak_index) >= pvsb):
+    #                 thresh_peaks.append(i)
+    #                 last_peak_index = i
+    #     return thresh_peaks
     #
-    # low_sens_limit = rv_sens_threshold * 2.8
-    # high_sens_limit = rv_sens_threshold * 4
-    # time_d = []
+    # def find_max_peaks(self, data, thresh_peaks, half_win_size_ms, sampling_freq, med_rr):
+    #     if half_win_size_ms > med_rr:
+    #         half_win_size_ms = int(med_rr/2)
+    #     win_size = int(half_win_size_ms * (sampling_freq / 1000))
+    #
+    #     max_peaks = []
+    #     for peak in thresh_peaks:
+    #         min_win = max(0, peak - win_size)
+    #         max_win = min(peak + win_size, len(data))
+    #         max_peak = np.argmax(data[min_win:max_win]) + min_win
+    #         max_peaks.append(max_peak)
+    #     return max_peaks
+
+    def exp_decay_plot(self, start_thresh, xdata, rvst): #This is the correct one
+        ylist = []
+        for x in xdata:
+            y = start_thresh * (1 - 1/312)**x
+            ylist.append(y)
+        return ylist
+
+    def find_peaks(self, data, pvsb, rvst, half_win_size_ms, sampling_freq, med_rr): #This is the correct one
+        if half_win_size_ms > med_rr:
+            half_win_size_ms = int(med_rr/2)
+        win_size = int(half_win_size_ms * (sampling_freq / 1000))
+        start_thresh = rvst
+        pvsb = int(pvsb * (sampling_freq / 1000))
+        peak_vals = []
+        last_peak_index = 0
+
+        # time = 480 * (sampling_freq/1000) # 480ms
+        # decay_rate = 1/ (312*(sampling_freq/1000)) # 1 mV per 312ms
+        max_peaks = []
+        for i, peak_value in enumerate(data):
+            if peak_value > rvst:
+                if last_peak_index==0 or ((i - last_peak_index) >= pvsb):
+                    min_win = max(0, i - win_size)
+                    max_win = min(i + win_size, len(data))
+
+                    max_peak = np.argmax(data[min_win:max_win]) + min_win
+                    max_peaks.append(max_peak)
+                    peak_val = data[max_peak]
+                    peak_vals.append(peak_val)
+
+                    last_peak_index = max_peak
+
+                    if peak_val > rvst*4:
+                        self.icd_memory['low_sens'].append(1)
+                        self.icd_memory['high_sens'].append(1)
+                    if peak_val < rvst*4 or peak_val > rvst*2.8:
+                        self.icd_memory['low_sens'].append(0)
+                        self.icd_memory['high_sens'].append(0)
+                    if peak_val < rvst*2.8:
+                        self.icd_memory['low_sens'].append(-1)
+                        self.icd_memory['high_sens'].append(-1)
+
+                    if peak_val*0.75 > rvst*8:
+                        start_thresh = 8 * rvst
+                    else:
+                        start_thresh = peak_val*0.75
+                    if start_thresh < rvst:
+                        start_thresh = rvst
+
+                    start = last_peak_index + int(120 * 0.512)
+                    exp_decay = self.exp_decay_plot(start_thresh, np.arange(0, max_win-start), rvst)
+                    for j, val in enumerate(exp_decay):
+                        if data[i] > val:
+                            continue
+
+                    if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] <=0.6:
+                        self.icd_mdt_parameters['rvst_value'] = max(self.icd_mdt_parameters['rvst_value'] - 0.15, 0.15)
+                        self.icd_memory['low_sens'] = deque(maxlen=16)
+                    if len(self.icd_memory['low_sens'])==16 and self.icd_memory['low_sens'].all()==-1 and self.icd_mdt_parameters['rvst_value'] >0.6:
+                        self.icd_mdt_parameters['rvst_value'] = self.icd_mdt_parameters['rvst_value'] - 0.3
+                        self.icd_memory['low_sens'] = deque(maxlen=16)
+                    if len(self.icd_memory['high_sense'])==36 and self.icd_memory['high_sense'].all()==1 and self.icd_mdt_parameters['rvst_value'] < 0.6:
+                        self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.15, 0.6)
+                        self.icd_memory['high_sense'] = deque(maxlen=36)
+                    if len(self.icd_memory['high_sense'])==36 and self.icd_memory['high_sense'].all()==1 and self.icd_mdt_parameters['rvst_value'] >= 0.6:
+                        self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.3, 1.8)
+                        self.icd_memory['high_sense'] = deque(maxlen=36)
+
+        return max_peaks, peak_vals, self.icd_memory['low_sens'], self.icd_memory['high_sens']
