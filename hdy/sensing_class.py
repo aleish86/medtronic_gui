@@ -209,8 +209,13 @@ class sensing(object):
         for k in self.used_signals.keys():
             if k in cardiac_signal:
                 string = k.lower()
-                # Zero Crossings - This detects the point where the gradient changes sign
-                self[string + '_zerocross'] = np.where(np.diff(np.sign(self[string + '_gradient'])))
+                self[string + '_zerocross'] = []
+                for peak in max_peaks[0:5]:
+                    # Zero Crossings - This detects the point where the gradient changes sign
+                    zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][max(0, peak - 60):min(peak + 60, len(self[string + '_gradient']))])))
+                    new_list = np.abs(list - peak).argmin()
+                    closest_zero = new_list + max(0, peak - 60)
+                    self[string + '_zerocross'].append(closest_zero)
 
     def peaks_zero_crossings(self):
         self.zero_crossings()
