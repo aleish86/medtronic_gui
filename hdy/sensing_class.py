@@ -220,25 +220,22 @@ class sensing(object):
                         closest_zero = min(new_list + start, end)
                         self[string + '_zerocross'].append(closest_zero)
 
-    def peak_zerox_diff(self, zero_cross, peaks):
-        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
-        for k in self.used_signals.keys():
-            if k in cardiac_signal:
-                string = k.lower()
-                self[string + '_peak_zerox'] = []
+    def peak_zerox_diff(self, signal):
+        self[signal + '_peak_zerox'] = []
+        peak_zerox_diff = np.array(peaks) - np.array(zero_cross)
 
-                peak_zerox_diff = np.array(peaks) - np.array(zero_cross)
-                return peak_zerox_diff
+        return peak_zerox_diff
 
-    def binary_data(self, zerox, peaks):
+    def binary_data(self, signal, pvsb, sampling_freq):
+        pvsb = int(pvsb * (sampling_freq / 1000))
         # Define the padding range
-        pad_range = 60
+        pad_range = pvsb
 
         # Initialize an array filled with zeros
-        result_array = np.zeros(len(self.rvbip_rect), dtype=int)
+        result_array = np.zeros(len(self[signal + '_rect']), dtype=int)
 
         # Mark the specified ranges with 1
-        for zero, peak in zip(zerox, peaks):
+        for zero, peak in zip(self[signal + '_zerocross'], self[signal + '_maxpeaks']):
             result_array[zero:peak + pad_range +1] = 1
         # self.rvbip_binary = [1 if (x > i and x < peak + 60) else 0 for x, y in enumerate(self.rvbip_gradient) for i in
         #                      self.rvbip_zerocross for peak in max_peaks]
@@ -249,7 +246,10 @@ class sensing(object):
             ylist.append(y)
         return ylist
 
-    def find_peaks(self, data, pvsb, rvst, half_win_size_ms, sampling_freq, med_rr): #This is the correct one
+    def find_peaks(self, input_signal, pvsb, rvst, half_win_size_ms, sampling_freq, med_rr): #This is the correct one
+        signal = str(input_signal.lower())
+        data = self[signal + '_rect']
+
         if half_win_size_ms > med_rr:
             half_win_size_ms = int(med_rr/2)
         win_size = int(half_win_size_ms * (sampling_freq / 1000))
