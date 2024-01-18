@@ -11,7 +11,6 @@ import hdy
 class sensing(object):
     def __init__(self, laser_exp:object, parent: object = None) -> object:
         self.laser_exp = laser_exp
-
         self.used_signals = {}
         for k, v in self.laser_exp.data_source.items():
             if v != 'blank':
@@ -19,46 +18,41 @@ class sensing(object):
             else:
                 pass
 
-        # Fixing and Correlating Data
-        self.fix_lag()
-        self.resample_data(1000, 512)
-        self.ecg_filter()
-        # Filtering ECGs
-        self.rectifier()
-        self.sq_rectifier()
-        self.derivatives()
         self.icd_memory = {}
         self.icd_memory['low_sens'] = deque(maxlen=16)
         self.icd_memory['high_sens'] = deque(maxlen=36)
-        self.ecg_peaks = []
-        self.ecg3_peaks = []
-        self.ralead_peaks = []
-        self.rvbip_peaks = []
-        self.rvshock_peaks = []
-        self.lvlead_peaks = []
-        self.laser1_peaks = []
-        self.laser2_peaks = []
 
-        self.filt_ecg_peaks = []
-        self.filt_ecg3_peaks = []
-        self.filt_ralead_peaks = []
-        self.filt_rvbip_peaks = []
-        self.filt_rvshock_peaks = []
-        self.filt_lvlead_peaks = []
-        self.filt_laser1_peaks = []
-        self.filt_laser2_peaks = []
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
 
+        for k in self.used_signals.keys():
+            # Fixing lag and Resampling Data
+            self.fix_lag()
+            self.resample_data(1000, 512)
+            if k in cardiac_signal:
+                signal = str(k.lower())
+                if k in ['ECG', 'ECG3']:
+                    self.ecg_filter(signal)
 
-        max_peaks, peak_vals, rr_list, self.icd_memory['low_sens'], self.icd_memory['high_sens'] = self.find_peaks(self.rvbip_rect, 120, 0.3, 75, 512, 1000)
-        self.zero_crossings(max_peaks)
-        self.fix_lag()
-        # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
+                # Filtering ECGs
+                self.rectifier(signal)
+                self.sq_rectifier(signal)
+                self.derivatives(signal)
+
+                # Finding Peaks
+                self[signal + 'max_peaks'], self[signal + 'peak_vals'], self[signal + 'rr_list'], self.icd_memory[
+                    signal + '_low_sens'], self.icd_memory[signal + '_high_sens'] = self.find_peaks(signal, 120, 0.3,
+                                                                                                    75, 512, 1000)
+                self.zero_crossings(self[signal + 'max_peaks'])
+
+        # self.fix_lag()        # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
         print("Sensing Class Initialized")
     def __getitem__(self, key):
         return getattr(self, key)
 
     def __setitem__(self, key, value):
         return setattr(self, key, value)
+
+
     def reject_outliers(self, data, m=2):
         return data[abs(data - np.mean(data)) < m * np.std(data)]
 
@@ -148,21 +142,28 @@ class sensing(object):
     def resample_data(self, original_fs, desired_fs):
         cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
         for k in self.used_signals.keys():
-            string = k.lower()
-            sec = (self[string + '_corr'].size) / original_fs
+            signal = k.lower()
+            sec = (self[signal + '_corr'].size) / original_fs
             new_length = int(sec * desired_fs)
-            self[string + '_resampled'] = scipy.signal.resample(self[string + '_corr'], new_length)
+            self[signal + '_resampled'] = scipy.signal.resample(self[signal + '_corr'], new_length)
             if k in cardiac_signal:
-                self[string + '_resampled_norm'] = self[string + '_resampled'] - min(self[string + '_resampled']) / (np.max(self[string + '_resampled']) - min(self[string + '_resampled']))
-                self[string + '_resampled_norm'] = self[string + '_resampled_norm'] - np.mean(self[string + '_resampled_norm'])
+                self[signal + '_resampled_norm'] = self[signal + '_resampled'] - min(self[signal + '_resampled']) / (
+                            np.max(self[signal + '_resampled']) - min(self[signal + '_resampled']))
+                self[signal + '_resampled_norm'] = self[signal + '_resampled_norm'] - np.mean(
+                    self[signal + '_resampled_norm'])
+        sec = (self[signal + '_corr'].size) / original_fs
+        new_length = int(sec * desired_fs)
+        self[signal + '_resampled'] = scipy.signal.resample(self[signal + '_corr'], new_length)
+        if k in cardiac_signal:
+            self[signal + '_resampled_norm'] = self[signal + '_resampled'] - min(self[signal + '_resampled']) / (
+                        np.max(self[signal + '_resampled']) - min(self[signal + '_resampled']))
+            self[signal + '_resampled_norm'] = self[signal + '_resampled_norm'] - np.mean(
+                self[signal + '_resampled_norm'])
 
-
-    def ecg_filter(self):
+    def ecg_filter(self, signal):
         ecg_sos = scipy.signal.butter(5, (0.5, 25), 'band', fs=512, output='sos')
-        for k in self.used_signals.keys():
-            if k in ['ECG', 'ECG3']:
-                string = k.lower()
-                self[string + '_filt'] = scipy.signal.sosfilt(ecg_sos, self[string + '_resampled_norm'])
+
+        self[signal + '_filt'] = scipy.signal.sosfilt(ecg_sos, self[signal + '_resampled_norm'])
 
     # def amplifier(self):
     #     # Fixing Voltage on leads
@@ -173,52 +174,36 @@ class sensing(object):
     #     self.ecg_data = self.ecg_data * 3
     #     self.ecg3_data = self.ecg3_data * 3
 
-    def rectifier(self):
+    def rectifier(self, signal):
+        if signal in ['ecg', 'ecg3']:
+            data = self[signal + '_filt']
+        else:
+            data = self[signal + '_resampled_norm']
+
+        self[signal + '_rect'] = abs(data)
+
+    def sq_rectifier(self, signal):
+        self.rectifier(signal)
         # Rectifying the ECG
-        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
-        for k in self.used_signals.keys():
-            if k in cardiac_signal:
-                string = k.lower()
-                if k in ['ECG', 'ECG3']:
-                    self[string + '_rect'] = abs(self[string + '_filt'])
-                else:
-                    self[string + '_rect'] = abs(self[string + '_resampled_norm'])
+        self[signal + '_sqrect'] = (self[signal + '_rect'] ** 2) * 10
 
-    def sq_rectifier(self):
-        self.rectifier()
-        # Rectifying the ECG
-        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
-        for k in self.used_signals.keys():
-            if k in cardiac_signal:
-                string = k.lower()
+    def derivatives(self, signal):
+        self.sq_rectifier(signal)
+        self[signal + '_gradient'] = np.gradient(self[signal + '_sqrect'])
 
-                self[string + '_sqrect'] = (self[string + '_rect'] ** 2) * 10
+    def zero_crossings(self, signal):
+        self.derivatives(signal)
 
-    def derivatives(self):
-        self.sq_rectifier()
-        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
-        for k in self.used_signals.keys():
-            if k in cardiac_signal:
-                string = k.lower()
-
-                self[string + '_gradient'] = np.gradient(self[string + '_sqrect'])
-
-    def zero_crossings(self, max_peaks):
-        self.derivatives()
-        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
-        for k in self.used_signals.keys():
-            if k in cardiac_signal:
-                string = k.lower()
-                self[string + '_zerocross'] = []
-                for peak in max_peaks:
-                    # Zero Crossings - This detects the point where the gradient changes sign
-                    start = max(0, peak - 30)
-                    end = min(peak + 30, len(self[string + '_gradient']))
-                    zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][start:end])))
-                    if len(zerocross[0]) > 0:
-                        new_list = np.abs(zerocross - peak).argmin()
-                        closest_zero = min(new_list + start, end)
-                        self[string + '_zerocross'].append(closest_zero)
+        self[signal + '_zerocross'] = []
+        for peak in self[signal + '_maxpeaks']:
+            # Zero Crossings - This detects the point where the gradient changes sign
+            start = max(0, peak - 30)
+            end = min(peak + 30, len(self[string + '_gradient']))
+            zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][start:end])))
+            if len(zerocross[0]) > 0:
+                new_list = np.abs(zerocross - peak).argmin()
+                closest_zero = min(new_list + start, end)
+                self[string + '_zerocross'].append(closest_zero)
 
     def peak_zerox_diff(self, signal):
         self[signal + '_peak_zerox'] = []
