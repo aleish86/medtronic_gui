@@ -89,11 +89,17 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         self.icd_memory['active_tachy'] = False
         
-        self.sensing = hdy.sensing(self.laser_exp)
+        self.sensing = hdy.sensing(laser_exp)
+
         # self.sensing.
 
         self.medtronic_vvi_gui()
         self.setup_m_vvi_plots()
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
 
     def medtronic_vvi_gui(self) -> object:
         pg.setConfigOptions(antialias=True, background='w')
@@ -503,9 +509,25 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         # self.max_x_list, self.rr_list, self.amplitude_list = data_list(self.sensing.rvbip_data, self.icd_mdt_parameters['rvst_value'],self.icd_mdt_parameters['pvsb_value'])
 
         # samples = self.sensing.resampled_ecg_data.shape[0]
-        if self.laser_exp.data_source['RVbip'] != 'blank':
-            samples = self.sensing.rvbip_data.shape[0]
-            ecg_hint = self.laser_exp.hints['Period']
+
+        signal_mapping = {
+            'RVbip': 'rvbip_resampled_norm',
+            'RVshock': 'rvshock_resampled_norm',
+            'ECG': 'ecg_filt',
+            'ECG3': 'ecg3_filt',
+            'LVlead': 'lvlead_resampled_norm',
+            'RAlead': 'ralead_resampled_norm',
+            'Laser1': 'laser1_resampled'
+        }
+
+        for signal, attribute in signal_mapping.items():
+            if any(signal in k for k in self.sensing.used_signals):
+                data = getattr(self.sensing, attribute)
+                samples = data.shape[0]
+                self.main_ecg_signal = signal
+                break  # Exit the loop if a match is found
+
+        ecg_hint = self.laser_exp.hints['Period']
 
         m_beat_end = 500 + self.trace_view
         m_beat_start = max(0, self.trace_view - 10000)
@@ -516,37 +538,18 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         print('m_beat_start: ', m_beat_start)
         print('m_beat_end: ', m_beat_end)
-
-        rvbip_vvi_data = self.sensing.rvbip_data[m_beat_start:m_beat_end]
-
-        rvshock_vvi_data = self.sensing.rvshock_data[m_beat_start:m_beat_end]
-
-        ecg_vvi_data = self.sensing.ecg_data[m_beat_start:m_beat_end]
-
-        laser1_vvi_data = self.sensing.laser1_data[m_beat_start:m_beat_end]
-
-        laser2_vvi_data = self.sensing.laser2_data[m_beat_start:m_beat_end]
-
-        # try:
-        #     rvbip_vvi_data = self.sensing.rvbip_data[m_beat_start:m_beat_end]
-        # except:
-        #     pass
-        # try:
-        #     rvshock_vvi_data = self.sensing.rvshock_data[m_beat_start:m_beat_end]
-        # except:
-        #     pass
-        # try:
-        #     ecg_vvi_data = self.sensing.ecg_data[m_beat_start:m_beat_end]
-        # except:
-        #     pass
-        # try:
-        #     laser1_vvi_data = self.sensing.laser1_data[m_beat_start:m_beat_end]
-        # except:
-        #     pass
-        # try:
-        #     laser2_vvi_data = self.sensing.laser2_data[m_beat_start:m_beat_end]
-        # except:
-        #     pass
+        data_types = {
+            'rvbip_vvi_data': self.sensing.rvbip_resampled_norm,
+            'rvshock_vvi_data': self.sensing.rvshock_resampled_norm,
+            'ecg_vvi_data': self.sensing.ecg_filt,
+            'ecg3_vvi_data': self.sensing.ecg3_filt,
+            'laser1_vvi_data': self.sensing.laser1_resampled,
+            'laser2_vvi_data': self.sensing.laser2_resampled  # Note: Corrected double underscore
+        }
+        for k in self.sensing.used_signals.keys():
+            signal = k.lower()
+            if signal in data_types:
+                psa_data = {key:value[m_beat_start:m_beat_end] for key, value in data_types.items() if key == signal + '_vvi_data'}
 
         for i, r_peak in enumerate(self.max_x_list):
             if m_beat_start <= r_peak <= m_beat_end:
@@ -785,14 +788,6 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
             self.icd_memory['median_rr_ints'].append(self.median_rr)
             print("Median RR: ", self.median_rr)
 
-        self.rvbip_vvi_plt.setData(x=m_vvi_range, y=rvbip_vvi_data, pen='#732F9B', symbol=None,
-                                   antialise=True,
-                                   autoDownsample=True, clipToView=True)
-
-        self.rvshock_vvi_plt.setData(x=m_vvi_range, y=rvshock_vvi_data, pen='#732F9B', symbol=None,
-                                     antialise=True,
-                                     autoDownsample=True, clipToView=True)
-
         self.marker_vvi_plt.setData(x=None, y=None, pen=None, symbol=None,
                                     antialise=True,
                                     autoDownsample=True, clipToView=True)
@@ -800,25 +795,27 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.marker_vvi_pw.setXRange(m_beat_start, m_beat_end, padding=0)
 
         self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=0, angle=0, pen='k', movable=False))
-        # self.marker_vvi_pw.addLine(x=None, y=0, pen ='k')
-        # plot(y=0.1, pen='k')
-        self.ecg_vvi_plt.setData(x=m_vvi_range, y=ecg_vvi_data, pen='#0FA00F', symbol=None,
-                                    antialise=True,
-                                    autoDownsample=True, clipToView=True)
-        self.laser1_vvi_plt.setData(x=m_vvi_range, y=laser1_vvi_data, pen='#03c6fc', symbol=None,
-                                    antialise=True,
-                                    autoDownsample=True, clipToView=True)
-        self.laser2_vvi_plt.setData(x=m_vvi_range, y=laser2_vvi_data, pen='#03c6fc', symbol=None,
-                                    antialise=True,
-                                    autoDownsample=True, clipToView=True)
 
-        self.overview_vvi_plt.setData(x=np.arange(samples), y=self.sensing.resampled_ecg_data, pen='#0FA00F',
+        for key, value in psa_data.items():
+            signal = key.split('_')[0]
+            if signal in ['ecg', 'ecg3']:
+                color = '#0FA00F'
+            if signal in ['rvbip', 'rvshock']:
+                color = '#732F9B'
+            if signal in ['laser1', 'laser2']:
+                color = '#03c6fc'
+
+            self['{}_vvi_plt'.format(signal)].setData(x=m_vvi_range, y=value, pen=color, symbol=None,
+                                                       antialias=True,
+                                                       autoDownsample=True, clipToView=True)
+
+        self.overview_vvi_plt.setData(x=np.arange(samples), y=data, pen='#0FA00F',
                                       symbol=None,
                                       antialise=True, autoDownsample=True, clipToView=True)
         self.overview_infline = pg.InfiniteLine(pos=m_beat_end, angle=90, pen='#fffb1a80', movable=False)
         self.overview_vvi_pw.addItem(self.overview_infline)
 
-        if self.trace_view >= (len(self.sensing.rvbip_data)):
+        if self.trace_view >= (len(samples) - 1):
             self.timer_m.stop()
 
 
