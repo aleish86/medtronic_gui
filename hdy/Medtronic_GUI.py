@@ -147,12 +147,12 @@ class MedtronicGui(QtWidgets.QMainWindow):
         #  GUI Setups
         self.tab_widget = QtWidgets.QTabWidget()
         self.tab1 = QtWidgets.QWidget()
-
+        self.sensing = hdy.sensing(self.laser_exp)
         self.wavelet_gui = hdy.Wavelet_GUI(self.laser_exp)
         self.beatplot_gui = hdy.BeatPlot_GUI(self.laser_exp)
         self.m_vvi_gui = hdy.MedtronicVVI_GUI(self.laser_exp)
         self.therapies_gui = hdy.vtherapies_GUI(self.laser_exp)
-        self.sensing = hdy.sensing(self.laser_exp)
+
 
         self.tab_widget.addTab(self.tab1, "Plot Overview")
         self.tab_widget.addTab(self.beatplot_gui, "Beat Plot")
@@ -442,22 +442,22 @@ class MedtronicGui(QtWidgets.QMainWindow):
         self.overview_pi.getAxis('left').setStyle(showValues=False)
 
         # self.x_marker = self.max_x_list[self.index1]
-        try:
+        # try:
             # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.rvbip.data,self.icd_mdt_parameters['rvst_value'], self.icd_mdt_parameters['pvsb_value'])
             # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.rvbip.data,
             #                                                                self.icd_mdt_parameters['rvst_value'],
             #                                                                self.icd_mdt_parameters['pvsb_value'])
-            self.max_x_list, self.rr_list = data_list(self.laser_exp.rvbip.data,
-                                                      self.icd_mdt_parameters['rvst_value'],
-                                                      self.icd_mdt_parameters['pvsb_value'])
-        except:
+        #     self.max_x_list, self.rr_list = data_list(self.laser_exp.rvbip.data,
+        #                                               self.icd_mdt_parameters['rvst_value'],
+        #                                               self.icd_mdt_parameters['pvsb_value'])
+        # except:
             # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.ecg.data,self.icd_mdt_parameters['rvst_value'], self.icd_mdt_parameters['pvsb_value'])
             # self.max_x_list, self.rr_list, self.amplitude_list, self.rpeaks = data_list(self.laser_exp.rvbip.data,
             #                                                                self.icd_mdt_parameters['rvst_value'],
             #                                                                self.icd_mdt_parameters['pvsb_value'])
-            self.max_x_list, self.rr_list = data_list(self.laser_exp.ecg.data,
-                                                      self.icd_mdt_parameters['rvst_value'],
-                                                      self.icd_mdt_parameters['pvsb_value'])
+            # self.max_x_list, self.rr_list = data_list(self.laser_exp.ecg.data,
+            #                                           self.icd_mdt_parameters['rvst_value'],
+            #                                           self.icd_mdt_parameters['pvsb_value'])
 
         # self.max_x_list, self.rr_list = data_list(self.laser_exp.rvbip.data)
 

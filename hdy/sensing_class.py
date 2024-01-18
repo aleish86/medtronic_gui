@@ -306,7 +306,6 @@ class sensing(object):
                     if data[k] > val:
                         next_peak =k
 
-                        print('Peak found near ' + str(next_peak))
                         break
                     else:
                         pass

@@ -45,8 +45,6 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.laser_exp = laser_exp
         self.trace_view = 0
 
-        self.mode_frequency = 0
-        self.mode_item = 0
         self.icd_mdt_parameters = {}
 
         # Initialize Parameters
@@ -75,6 +73,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.vt_counter = 0
         self.icd_memory['avg_interval_bin'] = deque(maxlen=4)
         self._fd_triggered = False
+        self._tf_triggered = False
         self._fvt_vtz_triggered = False
         self._vt_rate_triggered = False
         self.icd_memory['vf_check'] = deque(maxlen=8)
@@ -522,7 +521,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
             if any(signal in k for k in self.sensing.used_signals):
                 data = getattr(self.sensing, attribute)
                 samples = data.shape[0]
-                self.main_ecg_signal = signal
+                self.main_ecg_signal = signal.lower()
                 break  # Exit the loop if a match is found
 
         ecg_hint = self.laser_exp.hints['Period']
@@ -536,26 +535,32 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         print('m_beat_start: ', m_beat_start)
         print('m_beat_end: ', m_beat_end)
-        data_types = {
-            'rvbip': self.sensing.rvbip_resampled_norm,
-            'rvshock': self.sensing.rvshock_resampled_norm,
-            'ecg': self.sensing.ecg_filt,
-            'ecg3': self.sensing.ecg3_filt,
-            'laser1': self.sensing.laser1_resampled,
-            'laser2': self.sensing.laser2_resampled
-        }
+        psa_data = {}
         for k in self.sensing.used_signals.keys():
             signal = k.lower()
-            if signal in data_types:
-                psa_data = {key + '_vvi_data':value[m_beat_start:m_beat_end] for key, value in data_types.items()}
+            if signal in ['rvbip', 'rvshock']:
+                vvi_data = getattr(self.sensing, signal + '_resampled_norm')
+                psa_data[signal + '_vvi_data'] = vvi_data[m_beat_start:m_beat_end]
+            elif signal in ['ecg', 'ecg3']:
+                if 'ECG' not in self.sensing.used_signals.keys() and signal=='ecg3':
+                    vvi_data = getattr(self.sensing, 'ecg3_filt')
+                    ecg_signal = signal
+                    psa_data['ecg_vvi_data'] = vvi_data[m_beat_start:m_beat_end]
+                elif signal=='ecg':
+                    ecg_signal = signal
+                    vvi_data = getattr(self.sensing, signal + '_filt')
+                    psa_data[signal + '_vvi_data'] = vvi_data[m_beat_start:m_beat_end]
+                else:
+                    pass
+            elif signal in ['laser1', 'laser2']:
+                vvi_data = getattr(self.sensing, signal + '_resampled')
+                psa_data[signal + '_vvi_data'] = vvi_data[m_beat_start:m_beat_end]
+            else:
+                pass
+
 
 # RATES
-        rpeaks =  getattr(self.sensing, self.main_ecg_signal + '_maxpeaks')
         rrints = getattr(self.sensing, self.main_ecg_signal + '_rrints')
-
-        for rpeak in rpeaks:
-            if rpeak > m_beat_start and rpeak < m_beat_end:
-                self.marker_vvi_pi.addItem(pg.InfiniteLine(pos=rpeak, angle=90, pen=pg.mkPen('r', width=1)))
 
         for num, rrint in enumerate(rrints):
             self.icd_memory['rr_intervals'].append(rrint)
@@ -574,12 +579,15 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                     self.fvt_combobox.currentText() != "OFF"):
                 self.vt_counter += 1
                 self.marker_label = 'TS\n' + str(self.vt_counter)
-                ts_vf_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if 'TS' in rhythm)
-                if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and ts_vf_count == self.icd_mdt_parameters['vf_min_nid']:
-
-                    print("WARNING: FAST VT\nDETECTED")
                 self.icd_memory['rhythm_label'].append(self.marker_label)
+                ts_vf_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if 'TS' in rhythm)
+                if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and ts_vf_count == self.icd_mdt_parameters['vf_min_nid'] and self.fvt_combobox.currentText() == "via-VF":
+                    self.fvt_vfz_rate()
 
+                    print("WARNING: FAST VT\nDETECTED in VF Zone")
+                if len(self.icd_memory['rhythm_label']) >= self.icd_mdt_parameters['vt_nid'] and self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'])==True and self.fvt_combobox.currentText() == "via-VT":
+                    self.fvt_vtz_trigger()
+                    print("WARNING: FAST VT\nDETECTED in VT Zone")
 
             elif rrint <= self.icd_mdt_parameters['vf_tcl'] > max(self.icd_mdt_parameters['fvt_tcl'],
                                                                             self.icd_mdt_parameters['vf_tcl']) and (
@@ -596,165 +604,165 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                 self.icd_memory['rhythm_label'].append(self.marker_label)
 
 # ONSET DATA
-                    if self.onset_combobox != "OFF" and ((self.rr_int_vvi <= int(self.icd_mdt_parameters['vt_tcl'])) or (
-                            self.rr_int_vvi <= int(
-                        self.icd_mdt_parameters['fvt_tcl']) and self.fvt_tcl_combobox.currentText() == 'via-VT')) and (
-                            len(self.icd_memory['onset']) == 8) and int(self.vt_counter) >= 3:
+            if self.onset_combobox != "OFF" and ((rrint <= int(self.icd_mdt_parameters['vt_tcl'])) or (
+                    rrint <= int(
+                self.icd_mdt_parameters['fvt_tcl']) and self.fvt_tcl_combobox.currentText() == 'via-VT')) and (
+                    len(self.icd_memory['onset']) == 8) and int(self.vt_counter) >= 3:
 
-                        print('vt counter: ', self.vt_counter)
-                        # print("icd_memory onset: ", self.icd_memory['onset'])
-                        mdtc_onset_seq = np.array(self.icd_memory['onset'])
+                print('vt counter: ', self.vt_counter)
+                # print("icd_memory onset: ", self.icd_memory['onset'])
+                mdtc_onset_seq = np.array(self.icd_memory['onset'])
 
-                        print("medtronic onset sequence: ", mdtc_onset_seq)
-                        # print(type(mdtc_onset_seq))
-                        a = mdtc_onset_seq[:4]
-                        b = mdtc_onset_seq[4:]
+                print("medtronic onset sequence: ", mdtc_onset_seq)
+                # print(type(mdtc_onset_seq))
+                a = mdtc_onset_seq[:4]
+                b = mdtc_onset_seq[4:]
 
-                        print("a: ", a)
-                        print("b: ", b)
-                        onset_trigger = self.mdtc_onset_trigger(a, b)
+                print("a: ", a)
+                print("b: ", b)
+                onset_trigger = self.mdtc_onset_trigger(a, b)
 
-                        if (onset_trigger == True) and self.icd_memory['active_tachy'] == False:
-                            print("onset trigger: ", onset_trigger)
+                if (onset_trigger == True) and self.icd_memory['active_tachy'] == False:
+                    print("onset trigger: ", onset_trigger)
 
-                            print("\033[31mVT onset criteria has been met: \033[0m")
-                            self.icd_memory['active_tachy'] = True
-                            self.onset_met_lbl.show()
-                        else:
-                            pass
+                    print("\033[31mVT onset criteria has been met: \033[0m")
+                    self.icd_memory['active_tachy'] = True
+                    self.onset_met_lbl.show()
+                else:
+                    pass
 
-                        if onset_trigger == True:
+                if onset_trigger == True:
 
-                            if self.stability_combobox != "OFF" and int(self.vt_counter) == 3:
-                                mdtc_stabil_seq = self.icd_memory['stability'] = np.array(
-                                    self.icd_memory['rr_intervals'])[4:]
+                    if self.stability_combobox != "OFF" and int(self.vt_counter) == 3:
+                        mdtc_stabil_seq = self.icd_memory['stability'] = np.array(
+                            self.icd_memory['rr_intervals'])[4:]
 
-                                last_CL = mdtc_stabil_seq[-1]
-                                rest = mdtc_stabil_seq[0:2]
+                        last_CL = mdtc_stabil_seq[-1]
+                        rest = mdtc_stabil_seq[0:2]
 
-                                for i in rest:
-                                    stabil_eq = abs(last_CL - i)
-                                    print('stabil eq: ', stabil_eq)
+                        for i in rest:
+                            stabil_eq = abs(last_CL - i)
+                            print('stabil eq: ', stabil_eq)
 
-                                    if stabil_eq > self.icd_mdt_parameters['stability']:
-                                        print('NOT VT')
+                            if stabil_eq > self.icd_mdt_parameters['stability']:
+                                print('NOT VT')
 
-                                    elif stabil_eq < self.icd_mdt_parameters['stability']:
-                                        self.stability_met_lbl.show()
-                                        self._stability = True
-                            else:
-                                pass
-
-                        if self._stability == True and self.vt_counter >= 15:
-                            rr_int_sum = np.sum(self.icd_memory['rr_intervals'])
-                            print(rr_int_sum)
-                            m_begin = m_beat_end - rr_int_sum
-                            print("begin: ", m_begin)
-
-                            self.calc_results_beats(begin=m_begin, end=m_beat_end)
-
-                            print("laser1_val: ", self.laser1_val_vt)
-                            print("laser1_conf: ", self.laser1_conf_vt)
-                            print("laser2_val: ", self.laser2_val_vt)
-                            print("laser2_conf: ", self.laser2_conf_vt)
-
-                            if self.laser1_conf_vt > self.laser2_conf_vt:
-                                laser_val_vt = self.laser1_val_vt
-                                laser_conf_vt = self.laser1_conf_vt
-
-                            else:
-                                laser_val_vt = self.laser2_val_vt
-                                laser_conf_vt = self.laser2_conf_vt
-
-                            if laser_val_vt > 5 and laser_conf_vt > 25:
-                                print("Haemodynamically Stable")
-                                self._haem_comp = False
-                                self.haem_comp_alert_viewed = False
-                                if self._haem_comp:
-                                    self.haem_unstable_lbl.hide()
-
-                            if laser_val_vt <= 5:
-                                print("Haemodynamically Unstable")
-                                self._haem_comp = True
-                                self.haem_unstable_lbl.show()
-
-                                if self.haem_comp_alert_viewed:
-                                    pass
-                                else:
-                                    self.haem_unstable_lbl.show()
-                                    self.haem_comp_alert = HaemCompromise()
-                                    self.haem_comp_alert.show()
-                                    self.haem_comp_alert_viewed = True
-
-                            if self._haem_comp == False and self.vt_counter > self.icd_mdt_parameters[
-                                'vt_nid'] and self.marker_label != 'VS':
-                                print(self.vt_counter)
-                                if self.cancel_tx_viewed == True:
-                                    pass
-                                else:
-                                    self.cancel_tx = Therapy_Cancelled()
-                                    self.cancel_tx.show()
-                                    self.cancel_tx_viewed = True
-
-                            if self._haem_comp == True and self.vt_counter > self.icd_mdt_parameters['vt_nid']:
-
-                                if self._atp1_viewed == False:
-                                    print(self.median_rr)
-                                    median_rr = int(self.median_rr)
-                                    atp_ms = int(median_rr * 0.81 * 8.2)
-                                    print("atp duration (ms): ", atp_ms)
-
-                                    self.atp_del = ATP_Delivered(atp_ms)
-                                    self.atp_del.show()
-                                    self._atp_del1 = True
-                                    self._atp1_viewed = True
-
-                            if self._haem_comp == True and self._atp_del1 == True:
-
-                                if self._atp2_viewed == False:
-                                    atp_ms = int(self.median_rr * 0.81 * 8.2)
-                                    print("atp duration (ms): ", atp_ms)
-
-                                    self.atp_del = ATP_Delivered(atp_ms)
-                                    self.atp_del.show()
-                                    self._atp_del2 = True
-
-                            if self._haem_comp == True and self._atp_del2 == True:
-                                self.vt_shock = ShockDelivered()
-                                self.vt_shock.show()
-                                self.vt_shock_counter += 1
-
-
+                            elif stabil_eq < self.icd_mdt_parameters['stability']:
+                                self.stability_met_lbl.show()
+                                self._stability = True
                     else:
                         pass
 
-                    if self.icd_mdt_parameters['amplitude'] >= self.icd_mdt_parameters['sensitivity']:
-                        self.icd_memory['r_peak'].append(r_peak)
+                if self._stability == True and self.vt_counter >= 15:
+                    rr_int_sum = np.sum(self.icd_memory['rr_intervals'])
+                    print(rr_int_sum)
+                    m_begin = m_beat_end - rr_int_sum
+                    print("begin: ", m_begin)
 
-                        self.icd_memory['last_r_peak'] = r_peak
-                        print("R-Peak Detected", r_peak)
-                        print('rr_int', self.rr_int_vvi)
-                        self.x_marker = r_peak
-                        marker_inf_line = pg.InfiniteLine(pos=self.x_marker, angle=90, movable=False,
-                                                          label=self.marker_label,
-                                                          pen='k', span=(0.5, 1))
+                    self.calc_results_beats(begin=m_begin, end=m_beat_end)
 
-                        self.marker_vvi_pw.addItem(marker_inf_line)
-                        marker_inf_line.label.setPosition(-0.5)
-                        # ecgmarker_inf_line = pg.InfiniteLine(pos=self.x_ecgmarker, angle=90, movable=False,
-                        #                                          label=self.ecgmarker_label,
-                        #                                          pen='k', span=(0.5, 1))
-                        # self.ecg_vvi_pw.addItem(ecgmarker_inf_line)
-                        # ecgmarker_inf_line.label.setPosition(-0.5)
+                    print("laser1_val: ", self.laser1_val_vt)
+                    print("laser1_conf: ", self.laser1_conf_vt)
+                    print("laser2_val: ", self.laser2_val_vt)
+                    print("laser2_conf: ", self.laser2_conf_vt)
 
-                        if self.marker_label == 'TD' or self.marker_label == 'FD' or self.marker_label == 'FVT':
-                            self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_marker, markers='v', pen='r'))
-                            # self.ecgmarker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_ecgmarker, markers='v', pen='r'))
-                            # self.atp_delivery_lbl.show()
-                            # self.charging_lbl.show()
+                    if self.laser1_conf_vt > self.laser2_conf_vt:
+                        laser_val_vt = self.laser1_val_vt
+                        laser_conf_vt = self.laser1_conf_vt
 
                     else:
-                        print("No R-Peak Detected")
+                        laser_val_vt = self.laser2_val_vt
+                        laser_conf_vt = self.laser2_conf_vt
+
+                    if laser_val_vt > 5 and laser_conf_vt > 25:
+                        print("Haemodynamically Stable")
+                        self._haem_comp = False
+                        self.haem_comp_alert_viewed = False
+                        if self._haem_comp:
+                            self.haem_unstable_lbl.hide()
+
+                    if laser_val_vt <= 5:
+                        print("Haemodynamically Unstable")
+                        self._haem_comp = True
+                        self.haem_unstable_lbl.show()
+
+                        if self.haem_comp_alert_viewed:
+                            pass
+                        else:
+                            self.haem_unstable_lbl.show()
+                            self.haem_comp_alert = HaemCompromise()
+                            self.haem_comp_alert.show()
+                            self.haem_comp_alert_viewed = True
+
+                    if self._haem_comp == False and self.vt_counter > self.icd_mdt_parameters[
+                        'vt_nid'] and self.marker_label != 'VS':
+                        print(self.vt_counter)
+                        if self.cancel_tx_viewed == True:
+                            pass
+                        else:
+                            self.cancel_tx = Therapy_Cancelled()
+                            self.cancel_tx.show()
+                            self.cancel_tx_viewed = True
+
+                    if self._haem_comp == True and self.vt_counter > self.icd_mdt_parameters['vt_nid']:
+
+                        if self._atp1_viewed == False:
+                            print(self.median_rr)
+                            median_rr = int(self.median_rr)
+                            atp_ms = int(median_rr * 0.81 * 8.2)
+                            print("atp duration (ms): ", atp_ms)
+
+                            self.atp_del = ATP_Delivered(atp_ms)
+                            self.atp_del.show()
+                            self._atp_del1 = True
+                            self._atp1_viewed = True
+
+                    if self._haem_comp == True and self._atp_del1 == True:
+
+                        if self._atp2_viewed == False:
+                            atp_ms = int(self.median_rr * 0.81 * 8.2)
+                            print("atp duration (ms): ", atp_ms)
+
+                            self.atp_del = ATP_Delivered(atp_ms)
+                            self.atp_del.show()
+                            self._atp_del2 = True
+
+                    if self._haem_comp == True and self._atp_del2 == True:
+                        self.vt_shock = ShockDelivered()
+                        self.vt_shock.show()
+                        self.vt_shock_counter += 1
+
+
+            else:
+                pass
+
+            if self.icd_mdt_parameters['amplitude'] >= self.icd_mdt_parameters['sensitivity']:
+                self.icd_memory['r_peak'].append(r_peak)
+
+                self.icd_memory['last_r_peak'] = r_peak
+                print("R-Peak Detected", r_peak)
+                print('rr_int', self.rr_int_vvi)
+                self.x_marker = r_peak
+                marker_inf_line = pg.InfiniteLine(pos=self.x_marker, angle=90, movable=False,
+                                                  label=self.marker_label,
+                                                  pen='k', span=(0.5, 1))
+
+                self.marker_vvi_pw.addItem(marker_inf_line)
+                marker_inf_line.label.setPosition(-0.5)
+                # ecgmarker_inf_line = pg.InfiniteLine(pos=self.x_ecgmarker, angle=90, movable=False,
+                #                                          label=self.ecgmarker_label,
+                #                                          pen='k', span=(0.5, 1))
+                # self.ecg_vvi_pw.addItem(ecgmarker_inf_line)
+                # ecgmarker_inf_line.label.setPosition(-0.5)
+
+                if self.marker_label == 'TD' or self.marker_label == 'FD' or self.marker_label == 'FVT':
+                    self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_marker, markers='v', pen='r'))
+                    # self.ecgmarker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_ecgmarker, markers='v', pen='r'))
+                    # self.atp_delivery_lbl.show()
+                    # self.charging_lbl.show()
+
+            else:
+                print("No R-Peak Detected")
 
         if len(self.icd_memory['median_rr_ints']) == 12:
             self.median_rr = list(self.icd_memory['median_rr_ints'])
@@ -765,10 +773,25 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.marker_vvi_plt.setData(x=None, y=None, pen=None, symbol=None,
                                     antialise=True,
                                     autoDownsample=True, clipToView=True)
-        # self.marker_vvi_pw.setXRange(m_beat_view_start, m_beat_view_end, padding=0)
         self.marker_vvi_pw.setXRange(m_beat_start, m_beat_end, padding=0)
-
         self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=0, angle=0, pen='k', movable=False))
+
+        self.markerecg_vvi_plt.setData(x=None, y=None, pen=None, symbol=None,
+                                    antialise=True,
+                                    autoDownsample=True, clipToView=True)
+        self.markerecg_vvi_pw.setXRange(m_beat_start, m_beat_end, padding=0)
+        self.markerecg_vvi_pw.addItem(pg.InfiniteLine(pos=0, angle=0, pen='k', movable=False))
+
+        ecg_peaks = self.sensing[ecg_signal + '_maxpeaks']
+        rpeaks = getattr(self.sensing, self.main_ecg_signal + '_maxpeaks')
+        for num, rpeak in enumerate(rpeaks):
+            if rpeak > m_beat_start and rpeak < m_beat_end:
+                self.marker_vvi_pi.addItem(pg.InfiniteLine(pos=rpeak, angle=90, span=(0.5, 1), pen=pg.mkPen('k', width=1)))
+
+        for num, rpeak in enumerate(ecg_peaks):
+            if rpeak > m_beat_start and rpeak < m_beat_end:
+                self.markerecg_vvi_pi.addItem(pg.InfiniteLine(pos=rpeak, angle=90, span=(0.5, 1), pen=pg.mkPen('k', width=1)))
+        #         span=(0, 0.5) for just bottom half line
 
         for key, value in psa_data.items():
             signal = key.split('_')[0]
@@ -789,7 +812,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         self.overview_infline = pg.InfiniteLine(pos=m_beat_end, angle=90, pen='#fffb1a80', movable=False)
         self.overview_vvi_pw.addItem(self.overview_infline)
 
-        if self.trace_view >= (len(samples) - 1):
+        if self.trace_view >= (samples-1):
             self.timer_m.stop()
 
 
@@ -1544,28 +1567,6 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
             #     parent=self)
             # dual_laser_window.show()
 
-    def adjust_sensitivity(self):
-        # Calculate the decay factor based on the duration since the last event
-        print('rr_int', self.rr_int_vvi)
-        start_voltage = self.icd_mdt_parameters['rvst_value'] * 8
-        decay_factor = math.log10(self.icd_mdt_parameters['rvst_value'] / (start_voltage)) / self.rr_int_vvi
-        if np.isnan(self.icd_mdt_parameters['sensitivity']):
-            self.icd_mdt_parameters['sensitivity'] = 0.5
-        else:
-            pass
-        decayed_sensitivity = self.icd_mdt_parameters['sensitivity'] * (decay_factor ** self.rr_int_vvi)
-
-        if np.isnan(decayed_sensitivity):
-            decayed_sensitivity = 0.3
-        else:
-            pass
-        # Calculate the adjusted sensitivity based on the decayed sensitivity and amplitude
-        adjusted_sensitivity = decayed_sensitivity * self.icd_mdt_parameters['amplitude']
-        adjusted_sensitivity = max(adjusted_sensitivity, self.icd_mdt_parameters['rvst_value'])
-        adjusted_sensitivity = min(adjusted_sensitivity, 8 * self.icd_mdt_parameters['rvst_value'])
-
-        # Update the sensitivity
-        self.icd_mdt_parameters['sensitivity'] = adjusted_sensitivity
 
     def mdtc_onset_trigger(self, a, b):
         mean_a = np.mean(np.array(a))
@@ -1737,20 +1738,67 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                             self.haem_comp_alert.show()
                             self.haem_comp_alert_viewed = True
 
-    # def fvt_rate_trigger_vfzone(self):
-    #     rhythm_deque = self.icd_memory['rhythm_label']
-    #
-    #
-    #     if mode_item == "FS" and mode_frequency >= self.icd_mdt_parameters['vf_min_nid']  and len(
-    #             rhythm_deque) == self.icd_mdt_parameters['vf_max_nid']  and 'FD' not in rhythm_deque:
-    #         self.marker_label = 'FD'
-    #         self.icd_memory['rhythm_label'].append('FVT')
-    #
-    #
-    #         return True  # Criteria matched
-    #
-    #     else:
-    #         return False
+    def fvt_vfz_rate(self):
+        rhythm_deque = self.icd_memory['rhythm_label']
+
+        ts_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if rhythm == 'TS')
+        if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and ts_count == self.icd_mdt_parameters['vf_min_nid']:
+            if self._tf_triggered:
+                pass
+            else:
+                print("FVT Rate Triggered via VF Zone")
+                self._tf_triggered = True
+                self.marker_label = 'TF'
+                self.icd_memory['rhythm_label'].append('FD')
+                self.fvt_rate_trigger_lbl.show()
+                self.marker_vvi_pw.addItem(pg.InfiniteLine(markers='TF', pos = -0.2))
+                self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.x_marker, markers='v', pen='r'))
+
+                if self.indication.currentText() == "AMTest":
+                    self.calc_results_beats(begin=self.m_begin, end=self.m_end)
+                    self.laser1_vf = float(round(self.laser_exp.results['Laser1_Magic'], 4))
+                    self.laser1_conf_vf = float(round(self.laser_exp.results['Laser1_Conf'], 4))
+                    self.laser2_vf = float(round(self.laser_exp.results['Laser2_Magic'], 4))
+                    self.laser2_conf_vf = float(round(self.laser_exp.results['Laser2_Conf'], 4))
+                    print("laser1_val: ", self.laser1_vf)
+                    print("laser1_conf: ", self.laser1_conf_vf)
+                    print("laser2_val: ", self.laser2_vf)
+                    print("laser2_conf: ", self.laser2_conf_vf)
+
+                    if self.laser1_conf_vf >= self.laser2_conf_vf:
+                        laser_val_vf = self.laser1_vf
+                        laser_conf_vf = self.laser1_conf_vf
+
+                    else:
+                        laser_val_vf = self.laser2_vf
+                        laser_conf_vf = self.laser2_conf_vf
+
+                    if laser_val_vf > 5.2 and laser_conf_vf > 25:
+                        print("Haemodynamically Stable")
+                        self.haemStable = HaemStable()
+
+                        self._haemStable = True
+                        self.haemStable.show()
+
+                        if self._haem_comp:
+                            self.haem_unstable_lbl.hide()
+
+                    if laser_val_vf <= 5.2:
+                        print("Haemodynamically Unstable")
+                        self._haem_comp = True
+                        self.haem_unstable_lbl.show()
+
+                        if self.haem_comp_alert_viewed:
+                            pass
+                        else:
+                            self.haem_unstable_lbl.show()
+                            self.haem_comp_alert = HaemCompromise()
+                            self.haem_comp_alert.show()
+                            self.haem_comp_alert_viewed = True
+
+            self.marker_label = 'TF'
+            self.icd_memory['rhythm_label'].append('TF')
+
     #
     #
     # def count_item_frequency(self, rhythm_deque):
@@ -1759,7 +1807,7 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
     #     self.mode_item = mode_frequency[0]
     #     self.mode_frequency = mode_frequency[1]
 
-    def fvt_rate_trigger_vtzone(self):
+    def fvt_vtz_trigger(self):
         if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0 and self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'] ) == True:
             if self._fvt_vtz_triggered:
                 pass
@@ -1786,8 +1834,8 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         return False
     def vt_rate_trigger(self):
-
-        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0 and self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'] ) == True::
+        check = self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'])
+        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0 and check==True:
             if self._vt_rate_triggered:
                 pass
             else:
