@@ -48,8 +48,9 @@ class sensing(object):
         self.filt_laser1_peaks = []
         self.filt_laser2_peaks = []
 
-        self.zero_crossings()
-        self.find_peaks(self.rvbip_rect, 120, 0.3, 75, 512, 1000)
+
+        max_peaks, peak_vals, rr_list, self.icd_memory['low_sens'], self.icd_memory['high_sens'] = self.find_peaks(self.rvbip_rect, 120, 0.3, 75, 512, 1000)
+        self.zero_crossings(max_peaks)
         self.fix_lag()
         # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
         print("Sensing Class Initialized")
@@ -202,7 +203,7 @@ class sensing(object):
 
                 self[string + '_gradient'] = np.gradient(self[string + '_sqrect'])
 
-    def zero_crossings(self):
+    def zero_crossings(self, max_peaks):
         self.derivatives()
         cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
         for k in self.used_signals.keys():
@@ -219,7 +220,29 @@ class sensing(object):
                         closest_zero = min(new_list + start, end)
                         self[string + '_zerocross'].append(closest_zero)
 
-    def exp_decay_plot(self, start_thresh, xdata, rvst): #This is the correct one
+    def peak_zerox_diff(self, zero_cross, peaks):
+        cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
+        for k in self.used_signals.keys():
+            if k in cardiac_signal:
+                string = k.lower()
+                self[string + '_peak_zerox'] = []
+
+                peak_zerox_diff = np.array(peaks) - np.array(zero_cross)
+                return peak_zerox_diff
+
+    def binary_data(self, zerox, peaks):
+        # Define the padding range
+        pad_range = 60
+
+        # Initialize an array filled with zeros
+        result_array = np.zeros(len(self.rvbip_rect), dtype=int)
+
+        # Mark the specified ranges with 1
+        for zero, peak in zip(zerox, peaks):
+            result_array[zero:peak + pad_range +1] = 1
+        # self.rvbip_binary = [1 if (x > i and x < peak + 60) else 0 for x, y in enumerate(self.rvbip_gradient) for i in
+        #                      self.rvbip_zerocross for peak in max_peaks]
+    def exp_decay_plot(self, start_thresh, xdata): #This is the correct one
         ylist = []
         for x in xdata:
             y = start_thresh * (1 - 1/312)**x
@@ -235,61 +258,76 @@ class sensing(object):
         peak_vals = []
         last_peak_index = None
 
-        # time = 480 * (sampling_freq/1000) # 480ms
-        # decay_rate = 1/ (312*(sampling_freq/1000)) # 1 mV per 312ms
-        next_peak = []
+        next_peak = 0
         max_peaks = []
+        rr_list = []
         for i, peak_value in enumerate(data):
-            if peak_value > rvst:
-                if (last_peak_index is None) or ((i - last_peak_index) >= pvsb):
-                    min_win = max(0, i - win_size)
-                    max_win = min(i + win_size, len(data))
+            if (peak_value > rvst and ((last_peak_index is None) or ((i - last_peak_index) >= pvsb))) or (((last_peak_index is not None) and (i - last_peak_index) >= pvsb) and (next_peak==i) and (next_peak!=0)):
+                min_win = max(0, i - win_size)
+                max_win = min(i + win_size, len(data))
 
-                    max_peak = np.argmax(data[min_win:max_win]) + min_win
-                    max_peaks.append(max_peak)
-                    peak_val = data[max_peak]
-                    peak_vals.append(peak_val)
+                max_peak = np.argmax(data[min_win:max_win]) + min_win
 
-                    last_peak_index = max_peak
+                if (last_peak_index is not None) and ((max_peak - last_peak_index)< pvsb):
+                    continue
+                else:
+                    rr_list.append(max_peak)
 
-                    if peak_val > rvst*4:
-                        self.icd_memory['low_sens'].append(1)
-                        self.icd_memory['high_sens'].append(1)
-                    if peak_val < rvst*4 or peak_val > rvst*2.8:
-                        self.icd_memory['low_sens'].append(0)
-                        self.icd_memory['high_sens'].append(0)
-                    if peak_val < rvst*2.8:
-                        self.icd_memory['low_sens'].append(-1)
-                        self.icd_memory['high_sens'].append(-1)
+                max_peaks.append(max_peak)
 
-                    if peak_val*0.75 > rvst*8:
-                        start_thresh = 8 * rvst
+                peak_val = data[max_peak]
+                peak_vals.append(peak_val)
+
+                if last_peak_index is not None:
+                    rr_list.append(max_peak - last_peak_index)
+
+                last_peak_index = max_peak
+
+                if peak_val > rvst*4:
+                    self.icd_memory['low_sens'].append(1)
+                    self.icd_memory['high_sens'].append(1)
+                if peak_val < rvst*4 or peak_val > rvst*2.8:
+                    self.icd_memory['low_sens'].append(0)
+                    self.icd_memory['high_sens'].append(0)
+                if peak_val < rvst*2.8:
+                    self.icd_memory['low_sens'].append(-1)
+                    self.icd_memory['high_sens'].append(-1)
+
+                if peak_val*0.75 > rvst*8:
+                    start_thresh = 8 * rvst
+                else:
+                    start_thresh = peak_val*0.75
+                if start_thresh < rvst:
+                    start_thresh = rvst
+
+                if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] <=0.6:
+                    self.icd_mdt_parameters['rvst_value'] = max(self.icd_mdt_parameters['rvst_value'] - 0.15, 0.15)
+                    self.icd_memory['low_sens'] = deque(maxlen=16)
+                if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] >0.6:
+                    self.icd_mdt_parameters['rvst_value'] = self.icd_mdt_parameters['rvst_value'] - 0.3
+                    self.icd_memory['low_sens'] = deque(maxlen=16)
+                if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] < 0.6:
+                    self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.15, 0.6)
+                    self.icd_memory['high_sense'] = deque(maxlen=36)
+                if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] >= 0.6:
+                    self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.3, 1.8)
+                    self.icd_memory['high_sense'] = deque(maxlen=36)
+
+
+                start = last_peak_index + int(pvsb * 0.512)
+                rr_deque = deque(rr_list, maxlen=8)
+                maxwin_nextpeak = max_win + np.median(rr_deque)*3
+
+                exp_decay = self.exp_decay_plot(start_thresh, np.arange(0, maxwin_nextpeak - start))
+
+                for j, val in enumerate(exp_decay):
+                    k = min(j+start, len(data)-1)
+                    if data[k] > val:
+                        next_peak =k
+
+                        print('Peak found near ' + str(next_peak))
+                        break
                     else:
-                        start_thresh = peak_val*0.75
-                    if start_thresh < rvst:
-                        start_thresh = rvst
+                        pass
 
-                    start = last_peak_index + int(120 * 0.512)
-                    exp_decay = self.exp_decay_plot(start_thresh, np.arange(0, max_win-start), rvst)
-
-                    for j, val in enumerate(exp_decay):
-                        if data[i] > val:
-                            peak = j+start
-                            next_peak.append(peak)
-                            print('Peak found near ' + str(peak))
-                            break
-
-                    if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] <=0.6:
-                        self.icd_mdt_parameters['rvst_value'] = max(self.icd_mdt_parameters['rvst_value'] - 0.15, 0.15)
-                        self.icd_memory['low_sens'] = deque(maxlen=16)
-                    if len(self.icd_memory['low_sens'])==16 and all(item == -1 for item in self.icd_memory['low_sens']) and self.icd_mdt_parameters['rvst_value'] >0.6:
-                        self.icd_mdt_parameters['rvst_value'] = self.icd_mdt_parameters['rvst_value'] - 0.3
-                        self.icd_memory['low_sens'] = deque(maxlen=16)
-                    if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] < 0.6:
-                        self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.15, 0.6)
-                        self.icd_memory['high_sense'] = deque(maxlen=36)
-                    if len(self.icd_memory['high_sens'])==36 and all(item == 1 for item in self.icd_memory['high_sens']) and self.icd_mdt_parameters['rvst_value'] >= 0.6:
-                        self.icd_mdt_parameters['rvst_value'] = min(self.icd_mdt_parameters['rvst_value'] + 0.3, 1.8)
-                        self.icd_memory['high_sense'] = deque(maxlen=36)
-
-        return max_peaks, peak_vals, self.icd_memory['low_sens'], self.icd_memory['high_sens']
+        return max_peaks, peak_vals, rr_list, self.icd_memory['low_sens'], self.icd_memory['high_sens']
