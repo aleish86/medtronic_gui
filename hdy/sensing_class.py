@@ -42,7 +42,7 @@ class sensing(object):
                 self[signal + '_maxpeaks'], self[signal + '_peakvals'], self[signal + '_rrints'], self.icd_memory[
                     signal + '_lowsens'], self.icd_memory[signal + '_highsens'] = self.find_peaks(signal, 120, 0.3,
                                                                                                     75, 512, 1000)
-                self.zero_crossings(self[signal + 'max_peaks'])
+                self.zero_crossings(signal)
 
         # self.fix_lag()        # self.peak_adaptive_threshold(ecg_data, window_size = 75, threshold = rvst_value, pvsb_value, factor = 0.6)
         print("Sensing Class Initialized")
@@ -176,34 +176,30 @@ class sensing(object):
 
     def rectifier(self, signal):
         if signal in ['ecg', 'ecg3']:
-            data = self[signal + '_filt']
+            data = getattr(self, signal + '_filt')
         else:
-            data = self[signal + '_resampled_norm']
+            data = getattr(self, signal + '_resampled_norm')
 
         self[signal + '_rect'] = abs(data)
 
     def sq_rectifier(self, signal):
-        self.rectifier(signal)
         # Rectifying the ECG
         self[signal + '_sqrect'] = (self[signal + '_rect'] ** 2) * 10
 
     def derivatives(self, signal):
-        self.sq_rectifier(signal)
         self[signal + '_gradient'] = np.gradient(self[signal + '_sqrect'])
 
     def zero_crossings(self, signal):
-        self.derivatives(signal)
-
         self[signal + '_zerocross'] = []
         for peak in self[signal + '_maxpeaks']:
             # Zero Crossings - This detects the point where the gradient changes sign
             start = max(0, peak - 30)
-            end = min(peak + 30, len(self[string + '_gradient']))
-            zerocross = np.where(np.diff(np.sign(self[string + '_gradient'][start:end])))
+            end = min(peak + 30, len(self[signal + '_gradient']))
+            zerocross = np.where(np.diff(np.sign(self[signal + '_gradient'][start:end])))
             if len(zerocross[0]) > 0:
                 new_list = np.abs(zerocross - peak).argmin()
                 closest_zero = min(new_list + start, end)
-                self[string + '_zerocross'].append(closest_zero)
+                self[signal + '_zerocross'].append(closest_zero)
 
     def peak_zerox_diff(self, signal):
         self[signal + '_peak_zerox'] = []
