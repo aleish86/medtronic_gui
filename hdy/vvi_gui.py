@@ -74,11 +74,9 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
         self.vt_counter = 0
         self.icd_memory['avg_interval_bin'] = deque(maxlen=4)
-        # self.icd_memory['nid_vtzone1'] = deque(maxlen=30)
-        # self.icd_memory['nid_vtzone2'] = deque(maxlen=30)
-        # self.icd_memory['nid_vf'] = deque(maxlen=30)
-        # self.icd_memory['nid_nsr'] = deque(maxlen=10)
-        # self.icd_memory['nid_discard'] = deque(maxlen=10)
+        self._fd_triggered = False
+        self._fvt_vtz_triggered = False
+        self._vt_rate_triggered = False
         self.icd_memory['vf_check'] = deque(maxlen=8)
         self.icd_memory['median_rr_ints'] = deque(maxlen=12)
         self._stability=False
@@ -539,89 +537,65 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
         print('m_beat_start: ', m_beat_start)
         print('m_beat_end: ', m_beat_end)
         data_types = {
-            'rvbip_vvi_data': self.sensing.rvbip_resampled_norm,
-            'rvshock_vvi_data': self.sensing.rvshock_resampled_norm,
-            'ecg_vvi_data': self.sensing.ecg_filt,
-            'ecg3_vvi_data': self.sensing.ecg3_filt,
-            'laser1_vvi_data': self.sensing.laser1_resampled,
-            'laser2_vvi_data': self.sensing.laser2_resampled  # Note: Corrected double underscore
+            'rvbip': self.sensing.rvbip_resampled_norm,
+            'rvshock': self.sensing.rvshock_resampled_norm,
+            'ecg': self.sensing.ecg_filt,
+            'ecg3': self.sensing.ecg3_filt,
+            'laser1': self.sensing.laser1_resampled,
+            'laser2': self.sensing.laser2_resampled
         }
         for k in self.sensing.used_signals.keys():
             signal = k.lower()
             if signal in data_types:
-                psa_data = {key:value[m_beat_start:m_beat_end] for key, value in data_types.items() if key == signal + '_vvi_data'}
+                psa_data = {key + '_vvi_data':value[m_beat_start:m_beat_end] for key, value in data_types.items()}
 
-        for i, r_peak in enumerate(self.max_x_list):
-            if m_beat_start <= r_peak <= m_beat_end:
-                if not self.icd_memory['r_peak'] or r_peak > self.icd_memory['r_peak'][-1] + self.icd_mdt_parameters['pvsb_value']:
-                    self.rr_int_vvi = (r_peak - self.icd_memory['last_r_peak'])
-                                      # *1.95
+# RATES
+        rpeaks =  getattr(self.sensing, self.main_ecg_signal + '_maxpeaks')
+        rrints = getattr(self.sensing, self.main_ecg_signal + '_rrints')
 
-                    r_peak_max = self.sensing.rvbip_data[r_peak]
-                    # rpeakmax_ecg = ecg_vvi_data[r_peak]
-                    # print('rpeakmax_ecg: ', rpeakmax_ecg)
-                    print('r_peak_max: ', r_peak)
-                    self.m_begin = m_beat_start
-                    self.m_end = m_beat_end
+        for rpeak in rpeaks:
+            if rpeak > m_beat_start and rpeak < m_beat_end:
+                self.marker_vvi_pi.addItem(pg.InfiniteLine(pos=rpeak, angle=90, pen=pg.mkPen('r', width=1)))
 
+        for num, rrint in enumerate(rrints):
+            self.icd_memory['rr_intervals'].append(rrint)
+            self.icd_memory['onset'].append(rrint)
+            self.icd_memory['median_rr_ints'].append(rrint)
 
-                    if self.rr_int_vvi <= (self.icd_mdt_parameters['vf_tcl']) & i!=0:
-                        rpeak_area = 75
-                    else:
-                        rpeak_area = 150
-                    beat_plot = self.sensing.rvbip_data[max(r_peak - rpeak_area, 0): r_peak + rpeak_area]
-                    # beat_plot = self.sensing.ecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
+            if rrint <= self.icd_mdt_parameters['vf_tcl']:
+                self.marker_label = 'FS'
+                self.icd_memory['rhythm_label'].append(self.marker_label)
+                fs_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if rhythm == 'FS')
+                if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and fs_count == self.icd_mdt_parameters['vf_min_nid']:
+                    self.vf_rate_trigger()
+                    print("WARNING: VF\nDETECTED")
 
-                    # ecg_beatplot = self.sensing.ecg_data[r_peak - rpeak_area: r_peak + rpeak_area]
-                    r_peak_min = np.min(beat_plot)
+            elif self.icd_mdt_parameters['fvt_tcl'] >= rrint >= self.icd_mdt_parameters['vf_tcl'] and (
+                    self.fvt_combobox.currentText() != "OFF"):
+                self.vt_counter += 1
+                self.marker_label = 'TS\n' + str(self.vt_counter)
+                ts_vf_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if 'TS' in rhythm)
+                if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and ts_vf_count == self.icd_mdt_parameters['vf_min_nid']:
 
-
-                    # rpeakmin_ecg = np.min(ecg_beatplot)
-                    print('r_peak_min: ', r_peak_min)
-
-                    self.icd_mdt_parameters['amplitude'] = abs(r_peak_max) + abs(r_peak_min)
-
-                    print('amplitude: ', self.icd_mdt_parameters['amplitude'])
-                    self.adjust_sensitivity()
-
-                    self.icd_memory['rr_intervals'].append(self.rr_int_vvi)
-                    self.icd_memory['onset'].append(self.rr_int_vvi)
-                    self.icd_memory['median_rr_ints'].append(self.rr_int_vvi)
-
-                    if self.rr_int_vvi <= self.icd_mdt_parameters['vf_tcl']:
-
-                        self.marker_label = 'FS'
-                        self.icd_memory['rhythm_label'].append(self.marker_label)
-                        if self.vf_rate_trigger() == True:
-                            self.marker_label = 'FD'
-                            print("WARNING: VF\nDETECTED")
-
-                    elif self.icd_mdt_parameters['fvt_tcl'] > self.rr_int_vvi >= self.icd_mdt_parameters['vf_tcl'] and (
-                            self.fvt_combobox.currentText() != "OFF"):
-                        self.vt_counter += 1
-                        self.marker_label = 'TS\n' + str(self.vt_counter)
-                        self.icd_memory['rhythm_label'].append(self.marker_label)
-                        if self.fvt_rate_trigger_vtzone() == True:
-                            print("WARNING: FAST VT\nDETECTED")
-
-                    elif self.rr_int_vvi <= self.icd_mdt_parameters['vf_tcl'] > max(self.icd_mdt_parameters['fvt_tcl'],
-                                                                                    self.icd_mdt_parameters['vf_tcl']) and (
-                            self.fvt_combobox.currentText() == "OFF"):
-                        self.vt_counter += 1
-                        self.marker_label = 'TS\n' + str(self.vt_counter)
-                        self.icd_memory['rhythm_label'].append(self.marker_label)
-                        if self.vt_rate_trigger() == True:
-                            print("WARNING: VT\nDETECTED")
-
-                    else:
-                        self.vt_counter = 0
-                        self.marker_label = 'VS'
-                        self.icd_memory['rhythm_label'].append(self.marker_label)
+                    print("WARNING: FAST VT\nDETECTED")
+                self.icd_memory['rhythm_label'].append(self.marker_label)
 
 
+            elif rrint <= self.icd_mdt_parameters['vf_tcl'] > max(self.icd_mdt_parameters['fvt_tcl'],
+                                                                            self.icd_mdt_parameters['vf_tcl']) and (
+                    self.fvt_combobox.currentText() == "OFF"):
+                self.vt_counter += 1
+                self.marker_label = 'TS\n' + str(self.vt_counter)
+                self.icd_memory['rhythm_label'].append(self.marker_label)
+                if self.vt_rate_trigger() == True:
+                    print("WARNING: VT\nDETECTED")
 
-                    print('vt min nid: ', self.icd_mdt_parameters['vt_nid'])
+            else:
+                self.vt_counter = 0
+                self.marker_label = 'VS'
+                self.icd_memory['rhythm_label'].append(self.marker_label)
 
+# ONSET DATA
                     if self.onset_combobox != "OFF" and ((self.rr_int_vvi <= int(self.icd_mdt_parameters['vt_tcl'])) or (
                             self.rr_int_vvi <= int(
                         self.icd_mdt_parameters['fvt_tcl']) and self.fvt_tcl_combobox.currentText() == 'via-VT')) and (
@@ -1708,17 +1682,13 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
 
     def vf_rate_trigger(self):
         rhythm_deque = self.icd_memory['rhythm_label']
-        self.count_item_frequency(rhythm_deque)
-        fd_triggered = False  # Flag to track if TD label has been triggered
-
-        if self.mode_item == "FS" and self.mode_frequency >= self.icd_mdt_parameters['vf_min_nid'] and len(rhythm_deque) == self.icd_mdt_parameters['vf_max_nid'] and fd_triggered == False and 'FD' not in rhythm_deque:
-            vf_counter = 0
-            for item in rhythm_deque:
-                if item =='FS':
-                    vf_counter +=1
-
-            if vf_counter >= self.icd_mdt_parameters['vf_min_nid']:
+        fs_count = sum(1 for rhythm in self.icd_memory['rhythm_label'] if rhythm == 'FS')
+        if len(self.icd_memory['rhythm_label']) == self.icd_mdt_parameters['vf_max_nid'] and fs_count == self.icd_mdt_parameters['vf_min_nid']:
+            if self._fd_triggered:
+                pass
+            else:
                 print("VF Rate Triggered")
+                self._fd_triggered = True
                 self.marker_label = 'FD'
                 self.icd_memory['rhythm_label'].append('FD')
                 self.vf_rate_trigger_lbl.show()
@@ -1766,73 +1736,71 @@ class MedtronicVVI_GUI(QtWidgets.QWidget):
                             self.haem_comp_alert = HaemCompromise()
                             self.haem_comp_alert.show()
                             self.haem_comp_alert_viewed = True
-                # fd_triggered=True
-                return True  # Criteria matched
 
-            else:
-                return False
-        # return mode_item, mode_frequency
-
-    def fvt_rate_trigger_vfzone(self):
-        rhythm_deque = self.icd_memory['rhythm_label']
-        # counter = Counter(rhythm_deque)
-        # mode_frequency = counter.most_common(1)[0]
-        # mode_item = mode_frequency[0]
-        # mode_frequency = mode_frequency[1]
-        # fd_triggered=False
-
-        if mode_item == "FS" and mode_frequency >= self.icd_mdt_parameters['vf_min_nid']  and len(
-                rhythm_deque) == self.icd_mdt_parameters['vf_max_nid']  and 'FD' not in rhythm_deque:
-            self.marker_label = 'FD'
-            self.icd_memory['rhythm_label'].append('FD')
-            print("FVT Rate Triggered via VF Zone")
-            self.fvt_rate_vf_trigger_lbl.show()
-            # fd_triggered=True
-            self.marker_vvi_pw.addItem(pg.InfiniteLine(markers='t1'))
-
-            return True  # Criteria matched
-
-        else:
-            return False
-        self._hasrun = True
-
-    def count_item_frequency(self, rhythm_deque):
-        counter = Counter(rhythm_deque)
-        mode_frequency = counter.most_common(1)[0]
-        self.mode_item = mode_frequency[0]
-        self.mode_frequency = mode_frequency[1]
+    # def fvt_rate_trigger_vfzone(self):
+    #     rhythm_deque = self.icd_memory['rhythm_label']
+    #
+    #
+    #     if mode_item == "FS" and mode_frequency >= self.icd_mdt_parameters['vf_min_nid']  and len(
+    #             rhythm_deque) == self.icd_mdt_parameters['vf_max_nid']  and 'FD' not in rhythm_deque:
+    #         self.marker_label = 'FD'
+    #         self.icd_memory['rhythm_label'].append('FVT')
+    #
+    #
+    #         return True  # Criteria matched
+    #
+    #     else:
+    #         return False
+    #
+    #
+    # def count_item_frequency(self, rhythm_deque):
+    #     counter = Counter(rhythm_deque)
+    #     mode_frequency = counter.most_common(1)[0]
+    #     self.mode_item = mode_frequency[0]
+    #     self.mode_frequency = mode_frequency[1]
 
     def fvt_rate_trigger_vtzone(self):
-        fvt_vt_triggered = False
+        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0 and self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'] ) == True:
+            if self._fvt_vtz_triggered:
+                pass
+            else:
+                self.marker_label = 'TF'
+                self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.next_r, markers='v', pen='r'))
+                self.icd_memory['rhythm_label'].append(self.marker_label)
+                print("FVT Rate Triggered")
 
-        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0:
-            self.marker_label = 'FVT'
-            self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.next_r, markers='v', pen='r'))
-            self.icd_memory['rhythm_label'].append(self.marker_label)
-            print("FVT Rate Triggered")
+                self.fvt_rate_vt_trigger_lbl.show()
+                self.atp_delivery_lbl.show()
+                self.charging_lbl.show()
+                self._fvt_vtz_triggered = True
 
-            self.fvt_rate_vt_trigger_lbl.show()
-            self.atp_delivery_lbl.show()
-            self.charging_lbl.show()
-            fvt_vt_triggered = True
+    def check_consecutive_vt(self, rhythm_deque, vt_nid):
+        count = 0
+        for string in rhythm_deque:
+            if 'TS' in string:
+                count += 1
+            if count == vt_nid:
+                return True
+            else:
+                count = 0
 
-        return fvt_vt_triggered
-
+        return False
     def vt_rate_trigger(self):
-        vt_rate_triggered = False
 
-        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0:
-            self.marker_label = 'TD'
-            self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.next_r, markers='v', pen='r'))
-            self.icd_memory['rhythm_label'].append(self.marker_label)
-            print("FVT Rate Triggered via VT Zone")
+        if self.vt_counter == (int(self.icd_mdt_parameters['vt_nid'] ) + 1) and self.icd_mdt_parameters['vt_nid']  != 0 and self.check_consecutive_vt(self.icd_memory['rhythm_label'], self.icd_mdt_parameters['vt_nid'] ) == True::
+            if self._vt_rate_triggered:
+                pass
+            else:
+                self.marker_label = 'TD'
+                self.marker_vvi_pw.addItem(pg.InfiniteLine(pos=self.next_r, markers='v', pen='r'))
+                self.icd_memory['rhythm_label'].append(self.marker_label)
+                print("FVT Rate Triggered via VT Zone")
 
-            self.vt_rate_trigger_lbl.show()
-            self.atp_delivery_lbl.show()
-            # self.charging_lbl.show()
-            vt_rate_triggered = True
+                self.vt_rate_trigger_lbl.show()
+                self.atp_delivery_lbl.show()
+                # self.charging_lbl.show()
+                self._vt_rate_triggered = True
 
-        return vt_rate_triggered
 
     def detect_monitor_vt_combobox_changed(self):
         print(self.detect_monitor_vt_combobox.currentText())

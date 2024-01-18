@@ -39,8 +39,8 @@ class sensing(object):
                 self.derivatives(signal)
 
                 # Finding Peaks
-                self[signal + 'max_peaks'], self[signal + 'peak_vals'], self[signal + 'rr_list'], self.icd_memory[
-                    signal + '_low_sens'], self.icd_memory[signal + '_high_sens'] = self.find_peaks(signal, 120, 0.3,
+                self[signal + '_maxpeaks'], self[signal + '_peakvals'], self[signal + '_rrints'], self.icd_memory[
+                    signal + '_lowsens'], self.icd_memory[signal + '_highsens'] = self.find_peaks(signal, 120, 0.3,
                                                                                                     75, 512, 1000)
                 self.zero_crossings(self[signal + 'max_peaks'])
 
