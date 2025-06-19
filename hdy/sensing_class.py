@@ -143,7 +143,7 @@ class sensing(object):
         cardiac_signal = ['ECG', 'ECG3', 'RVbip', 'RVshock', 'RAlead', 'LVlead']
         for k in self.used_signals.keys():
             signal = k.lower()
-            sec = (self[signal + '_corr'].size) / original_fs
+            sec = len(self[signal + '_corr']) / original_fs
             new_length = int(sec * desired_fs)
             self[signal + '_resampled'] = scipy.signal.resample(self[signal + '_corr'], new_length)
             if k in cardiac_signal:
@@ -151,7 +151,7 @@ class sensing(object):
                             np.max(self[signal + '_resampled']) - min(self[signal + '_resampled']))
                 self[signal + '_resampled_norm'] = self[signal + '_resampled_norm'] - np.mean(
                     self[signal + '_resampled_norm'])
-        sec = (self[signal + '_corr'].size) / original_fs
+        sec = len(self[signal + '_corr']) / original_fs
         new_length = int(sec * desired_fs)
         self[signal + '_resampled'] = scipy.signal.resample(self[signal + '_corr'], new_length)
         if k in cardiac_signal:
@@ -252,7 +252,7 @@ class sensing(object):
                 if (last_peak_index is not None) and ((max_peak - last_peak_index)< pvsb):
                     continue
                 else:
-                    rr_list.append(max_peak)
+                    pass
 
                 max_peaks.append(max_peak)
 
@@ -261,6 +261,8 @@ class sensing(object):
 
                 if last_peak_index is not None:
                     rr_list.append(max_peak - last_peak_index)
+                else:
+                    rr_list.append(max_peak)
 
                 last_peak_index = max_peak
 

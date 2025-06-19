@@ -539,7 +539,7 @@ class MedtronicGui(QtWidgets.QMainWindow):
             self.ecg_peak_plt.clear()
 
         if self.rect_combo.currentIndex() == 0:
-            bip_ecg = self.laser_exp.ecg.data.copy()
+            bip_ecg = self.laser_exp.bipecg.data.copy()
             ecg3 = self.laser_exp.ecg3.data.copy()
             rvshock = self.laser_exp.rvshock.data.copy()
             rvbip = self.laser_exp.rvbip.data.copy()

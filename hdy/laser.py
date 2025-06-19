@@ -16,7 +16,7 @@ def calc_magic_laser(ecg_data, laser_data, no_log=False):
     if not no_log:
         laser_data = laser_data+10
         laser_data = np.log(laser_data) + laser_data/100
-    laser_data = mmt.butter_bandpass_filter(laser_data, 0.5, 5.0, 1000, order=2)
+    laser_data = mmt.butter_bandpass_filter(laser_data, 0.5, 25.0, 1000, order=2)
 
     print("ecg_peaks ", ecg_peaks_sample)
 

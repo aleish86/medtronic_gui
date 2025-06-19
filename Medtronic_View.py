@@ -5,20 +5,20 @@ import hdy
 from PySide6 import QtWidgets
 os.environ['PYQTGRAPH_QT_LIB'] = 'PySide6'
 
-SOURCE="rvnoise"
+SOURCE="aad"
 
 def main():
     if SOURCE=="aad":
         database_dir = "/Users/amiyazawa/Library/CloudStorage/Dropbox/01 Research/02 Current Projects/02 AAD/Data"
         database_fn = 'AAD_all.csv'
-        patient = 'SR01'#'A01'#'B09' #'VTAbl03'#'VTAbl07'#'A01'#'B08'
-        exp ='Exp14' #'Exp1' #'Exp185' #"Exp20" #297 (RVP) "Exp1" vs 282 (HBP)
+        patient = 'A01'#'A01'#'B09' #'VTAbl03'#'VTAbl07'#'A01'#'B08'
+        exp ='Exp464' #'Exp1' #'Exp185' #"Exp20" #297 (RVP) "Exp1" vs 282 (HBP)
         mode = "normal"
-    if SOURCE=="rvnoise":
+    elif SOURCE=="rvnoise":
         database_dir = "/Users/amiyazawa/Library/CloudStorage/Dropbox/01 Research/02 Current Projects/02 AAD/Data"
         database_fn = 'SimRVNoise.csv'
-        patient = 'A01'#'A01'
-        exp = 'Exp3' #'Exp3'
+        patient = 'A08'#'A01'
+        exp = 'Exp46'#'26' #'Exp3'
         mode = "normal"
 
     else:

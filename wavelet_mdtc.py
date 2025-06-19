@@ -18,8 +18,8 @@ import pyqtgraph
 from collections import deque
 import time
 
-FILE_DIR = "/Users/amiyazawa/Dropbox/01 Research/AAD/Data/A03/Haem"
-FILE_FN = "AAD03_VVI160_08_11_2021_114850_.zip"
+FILE_DIR = "/Users/amiyazawa/Library/CloudStorage/Dropbox/01 Research/02 Current Projects/02 AAD/Data/A08/Haem"
+FILE_FN = "A08_LVP180_15_07_2022_155306_.zip"
 #"AAD03_VVI180_08_11_2021_114608_.zip"
 
 daq_data = hdy.DAQ_File(zip_dir=FILE_DIR, zip_fn=FILE_FN)
@@ -65,13 +65,13 @@ def extract_beat(signal, qrs_pos, half_win_ms=100, fs=1000, start_beat=100, end_
 '''
 '''
 
-qrs_pos = [1,100,3500]
-plt.plot(x)
-for q in qrs_pos:
-    y,label = extract_beat(x,q)
-    plt.figure()
-    plt.plot(y)
-    plt.plot(label)
+# qrs_pos = [1,100,3500]
+# plt.plot(x)
+# for q in qrs_pos:
+#     y,label = extract_beat(x,q)
+#     plt.figure()
+#     plt.plot(y)
+#     plt.plot(label)
 
 for r_peak in r_peaks:
     print(r_peak)
@@ -105,32 +105,32 @@ for r_peak in r_peaks:
     # cD: Detail coefficients
 
     # 1 wavelet, 1 beat
-    custom_xlim1 = (r_peak-100, r_peak+100)
+    # custom_xlim1 = (r_peak-100, r_peak+100)
 
     # fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, gridspec_kw={'width_ratios': [1, 3, 3, 3], 'height_ratios': [0.5]})
-    plt.xlim(custom_xlim1)
-    #    fig.suptitle('R wave and wavelets')
-    # plt.title.set_text('Wavelets')
-    plt.plot(daq_data.plethg)
-    plt.plot(r_peaks, daq_data.plethg[r_peaks], "ro")
-    plt.plot(wavelet)
-    plt.plot(np.round(cD4, 2) * cA4)
-    plt.plot(np.round(maxcoeff_ten))
+    # plt.xlim(custom_xlim1)
+    # #    fig.suptitle('R wave and wavelets')
+    # # plt.title.set_text('Wavelets')
+    # plt.plot(daq_data.plethg)
+    # plt.plot(r_peaks, daq_data.plethg[r_peaks], "ro")
+    # plt.plot(wavelet)
+    # plt.plot(np.round(cD4, 2) * cA4)
+    # plt.plot(np.round(maxcoeff_ten))
+    #
+    # plt.show()
 
-    plt.show()
-
-#  #   custom_xlim = (six_beat_wavelets[0] - 100, six_beat_wavelets[5] + 100)
-#     fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, gridspec_kw = {'width_ratios': [1, 3, 3,3], 'height_ratios': [0.5]})
-#     plt.setp(ax1, xlim=custom_xlim1)
-# #    fig.suptitle('R wave and wavelets')
-#     ax1.title.set_text('ECG Beat')
-#     ax2.title.set_text('Wavelet')
-#     ax3.title.set_text('Coefficients')
-#     ax1.plot(daq_data.ecg)
-#     ax1.plot(r_peaks, daq_data.ecg[r_peaks], "ro")
-#     ax2.plot(wavelet)
-#     ax3.plot(np.round(cD4,2)*cA4)
-#     ax4.plot(np.round(maxcoeff_ten))
+    custom_xlim = (six_beat_wavelets[0] - 100, six_beat_wavelets[5] + 100)
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, gridspec_kw = {'width_ratios': [1, 3, 3,3], 'height_ratios': [0.5]})
+    plt.setp(ax1, xlim=custom_xlim1)
+#    fig.suptitle('R wave and wavelets')
+    ax1.title.set_text('ECG Beat')
+    ax2.title.set_text('Wavelet')
+    ax3.title.set_text('Coefficients')
+    ax1.plot(daq_data.ecg)
+    ax1.plot(r_peaks, daq_data.ecg[r_peaks], "ro")
+    ax2.plot(wavelet)
+    ax3.plot(np.round(cD4,2)*cA4)
+    ax4.plot(np.round(maxcoeff_ten))
 
     plt.show()
 

@@ -24,7 +24,7 @@ class Wavelet_GUI(QtWidgets.QWidget):
         self.icd_mdt_parameters = {}
         self.icd_mdt_parameters['vt_tcl'] = 0 # Nominal OFF
         self.icd_mdt_parameters['vf_tcl'] = 320 # 188 bpm
-        self.icd_mdt_parameters['rvst_value'] = 0.3 # 188 bpm
+        self.icd_mdt_parameters['rvst_value'] = 0.3 # Nominal
         self.icd_mdt_parameters['pvsb_value'] = 120 # Nominal
         self.icd_mdt_parameters['vt_min_nid'] = 24 # Nominal
         self.icd_mdt_parameters['vf_max_nid'] = 40 # Nominal 30/40
@@ -297,6 +297,8 @@ class Wavelet_GUI(QtWidgets.QWidget):
             self.update_wavelet_plots()
 
     def collect_template_btn_clicked(self):
+        self.wavelet_template_pw.clear()
+
         print("Collecting template")
         normal_waveforms = self.icd_memory['wavelet_beats']
 
@@ -309,7 +311,6 @@ class Wavelet_GUI(QtWidgets.QWidget):
         num_beats = 8
         dwt_coeffs = []
         idwt_beats = []
-        self.wavelet_template_pw.clear()
 
         if len(normal_waveforms) < num_beats:
             print("Not enough beats to create wavelet template")
@@ -328,9 +329,9 @@ class Wavelet_GUI(QtWidgets.QWidget):
         for i in range(num_beats):
             beat = idwt_beats[i]
             x = np.arange(len(beat))
-            self.wavelet_template_pw.plot(x, beat, pen='k')
+            self.wavelet_template_pi.plot(x, beat, pen='k')
 
-        saved_temp_coeffs = np.mean(dwt_coeffs, axis=0)
+        # saved_temp_coeffs = np.mean(dwt_coeffs, axis=0)
         # self.saved_wavelet_template = saved_temp_coeffs[1]
         # print('saved template', self.saved_wavelet_template)
 
@@ -339,7 +340,7 @@ class Wavelet_GUI(QtWidgets.QWidget):
 
         color = QtGui.QColor(255, 0, 0, 127)  # Red color with 50% transparency
         pen = pg.mkPen(color=color, width=5)
-        self.wavelet_template_pw.plot(x, self.saved_wavelet_template, pen=pen)
+        self.wavelet_template_pi.plot(x, self.saved_wavelet_template, pen=pen)
 
     def select_N_largest_coeffs(self, coeffs, N):
         abs_coeffs = np.abs(coeffs)  # Calculate the absolute values of coefficients
@@ -486,7 +487,6 @@ class Wavelet_GUI(QtWidgets.QWidget):
 
             self.compute_match_score(template_coeffs, waveform)
 
-
             print('waveform', waveform)
             print('wavelet threshold: ', self.icd_mdt_parameters['wavelet_match_threshold'])
             print('match score: ', self.wavelet_match_score)
@@ -501,8 +501,6 @@ class Wavelet_GUI(QtWidgets.QWidget):
         if np.round(self.wavelet_match_score, 2) >= int(self.icd_mdt_parameters['wavelet_match_threshold']):  # Set the match threshold to 70%
             num_matches += 1
 
-
-
     def check_recent_waveforms(self, template_coeffs, recent_waveforms):
         mismatch_count = 0
         for waveform in recent_waveforms:
@@ -511,7 +509,6 @@ class Wavelet_GUI(QtWidgets.QWidget):
 
             if self.wavelet_match_score < int(self.icd_mdt_parameters['wavelet_match_threshold']):  # Set the match threshold to 70%
                 mismatch_count += 1
-
 
                 if mismatch_count >= 6:
 

@@ -26,7 +26,7 @@ PR_DELAY = 120
 from collections import namedtuple
 
 MagicResults = namedtuple('MagicResults',
-                          ['max_idx', 'min_idx', 'magic_data_all', 'magic_data', 'magic_value', 'conf_value'])
+                          ['max_idx', 'min_idx', 'magic_data_all', 'magic_data', 'magic_value', 'conf_value', 'delay', 'slope'])
 
 class BSplineFeatures(sklearn.base.TransformerMixin):
     def __init__(self, knots, degree=3, periodic=False):
@@ -105,7 +105,7 @@ class LaserAnalysis1(object):
 
         self.data_source = {}
 
-        for key in ['ECG', 'BP', 'Laser1', 'Laser2', 'ECG3', 'RVshock', 'RVbip', 'LVlead', 'RAlead']:
+        for key in ['BipECG', 'BP', 'Laser1', 'Laser2', 'ECG3', 'RVshock', 'RVbip', 'LVlead', 'RAlead']:
             try:
                 self.data_source[key] = getattr(self.hints, key, "blank")
             except:
@@ -115,7 +115,7 @@ class LaserAnalysis1(object):
             print(key, self.data_source[key])
 
         self.data = {}
-        ecg_containers = ['ECG','ECG3', 'RVshock', 'RVbip', 'LVlead', 'RAlead']
+        ecg_containers = ['BipECG','ECG3', 'RVshock', 'RVbip', 'LVlead', 'RAlead']
         laser_containers = ['Laser1', 'Laser2']
 
         for k, v in self.data_source.items():
@@ -151,8 +151,8 @@ class LaserAnalysis1(object):
         print(ecg_hint)
         # Change here
 
-        if self.data_source['ECG']!= 'blank':
-            self.data['ECG'].calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
+        if self.data_source['BipECG']!= 'blank':
+            self.data['ECG3'].calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
         if self.data_source['RVbip']!= 'blank':
             self.data['RVbip'].calc_ecg_peaks(begin=begin, end=end, ecg_hint=ecg_hint)
 
@@ -183,7 +183,7 @@ class LaserAnalysis1(object):
         self.results['Laser1_SJM'] = np.mean(envelope1_data)
         self.results['Laser2_SJM'] = np.mean(envelope2_data)
 
-        if self.data_source['ECG']!= 'blank':
+        if self.data_source['BipECG']!= 'blank':
             self.results['Median_RR (bip)'] = int(np.median(np.diff(self.bipecg.peaks_sample)))
         if self.data_source['ECG3']!= 'blank':
             self.results['Median_RR (3)'] = int(np.median(np.diff(self.ecg3.peaks_sample)))
@@ -197,8 +197,7 @@ class LaserAnalysis1(object):
             self.results['Median_AA (RA)'] = int(np.median(np.diff(self.ralead.peaks_sample)))
 
         for i, (sbp, map, laser1, laser2, laser1peak, laser2peak) in enumerate(zip(self.pressure.peaks_value, self.pressure.map_beat,
-                                                               self.laser1_mean_laser_beat,
-                                                               self.laser2_mean_laser_beat, self.laser1.peaks_value, self.laser2.peaks_value)):
+                                                               self.laser1_mean_laser_beat, self.laser2_mean_laser_beat, self.laser1.peaks_value, self.laser2.peaks_value)):
                 self.results_beatbybeat['Patient'].append(self.patient)
                 self.results_beatbybeat['Experiment'].append(self.exp)
                 self.results_beatbybeat['File'].append(self.hints["File"])
@@ -276,7 +275,7 @@ class LaserAnalysis1(object):
                 pass
 
     def calc_magic_results(self, begin=None, end=None, laser="laser1"):
-        if self.data_source['ECG'] != 'blank':
+        if self.data_source['BipECG'] != 'blank':
             if begin == None:
                 ecg_peaks_sample = self.bipecg.peaks_sample
             else:
