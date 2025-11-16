@@ -6260,10 +6260,20 @@ class MedtronicICDAnalyser:
 
         if result['success']:
             logger.info(f"✓ Template created successfully for {patient_id} using {wavelet_lead}")
-            return True
+            # Return template data for transfer back to main process
+            return {
+                'success': True,
+                'patient_id': patient_id,
+                'wavelet_lead': wavelet_lead,
+                'template_data': self.wavelet.patient_templates.get(patient_id, {})
+            }
         else:
             logger.warning(f"✗ Failed to create template for {patient_id}: {result.get('reason', 'Unknown')}")
-            return False
+            return {
+                'success': False,
+                'patient_id': patient_id,
+                'reason': result.get('reason', 'Unknown')
+            }
 
     def extract_detection_timing(self, analysis_result: Dict[str, Any]) -> Optional[float]:
         """
@@ -9039,6 +9049,12 @@ class MedtronicICDAnalyser:
             'pr_discrimination_reason', 'atrial_rate',
             'mean_pr_interval', 'va_conduction', 'p_waves_detected',
 
+            # Lead Integrity Alert (LIA)
+            'lia_performed', 'lia_lead_issue_detected', 'lia_confidence',
+            'lia_recommendation', 'lia_high_npi_density', 'lia_consecutive_npis',
+            'lia_rail_to_rail_noise', 'lia_chaotic_pattern', 'lia_bimodal_distribution',
+            'lia_intervals_analyzed',
+
             # Zero-crossing metrics (including combined-specific)
             'baseline_mean_zc_to_peak_ms', 'baseline_median_zc_to_peak_ms',
             'baseline_mean_ecg_zc_to_egm_peak_ms', 'baseline_median_ecg_zc_to_egm_peak_ms',
@@ -9175,16 +9191,28 @@ class MedtronicICDAnalyser:
                 for patient_id in patients_needing_baselines
             }
 
-            # Collect results as they complete
+            # Collect results as they complete and transfer templates to main process
             for future in as_completed(future_to_patient):
                 patient_id = future_to_patient[future]
                 try:
-                    success = future.result()
-                    logger.info(f"  Patient {patient_id}: {'✓' if success else '✗'}")
+                    result = future.result()
+
+                    if isinstance(result, dict) and result.get('success'):
+                        # Transfer template from worker process to main process
+                        template_data = result.get('template_data', {})
+                        if template_data:
+                            self.wavelet.patient_templates[patient_id] = template_data
+                            logger.info(f"  Patient {patient_id}: ✓ (template transferred)")
+                        else:
+                            logger.warning(f"  Patient {patient_id}: ✓ but no template data")
+                    else:
+                        reason = result.get('reason', 'Unknown') if isinstance(result, dict) else 'Unknown'
+                        logger.error(f"  Patient {patient_id}: ✗ ({reason})")
                 except Exception as e:
                     logger.error(f"  Patient {patient_id}: ✗ Error - {e}")
 
         logger.info(f"Baseline creation complete for {len(patients_needing_baselines)} patients")
+        logger.info(f"Templates in memory: {len(self.wavelet.patient_templates)}")
 
     def _process_single_episode(self, label_key: str, episode_rows: List[pd.Series]) -> List[Dict[str, Any]]:
         """Process a single episode - designed to be run in parallel"""
