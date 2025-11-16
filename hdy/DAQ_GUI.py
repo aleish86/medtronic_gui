@@ -4,6 +4,7 @@ from PySide6 import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 from .DAQ_File import DAQ_File
 # Need to create tab for Moving plot graphs
+from DAQ_File import DAQ_File
 class DAQ_GUI(QtWidgets.QMainWindow):
 
     def __init__(self, parent=None):
