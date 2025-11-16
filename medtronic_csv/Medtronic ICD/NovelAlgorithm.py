@@ -121,11 +121,11 @@ class ICDParameters:
 
     def get_vt_threshold_bpm(self) -> int:
         """Convert VT TCL to BPM"""
-        return int(60000 / self.vt_tcl)
+        return int(MedtronicRateSmoothing.interval_to_rate(self.vt_tcl))
 
     def get_vf_threshold_bpm(self) -> int:
         """Convert VF TCL to BPM"""
-        return int(60000 / self.vf_tcl)
+        return int(MedtronicRateSmoothing.interval_to_rate(self.vf_tcl))
 
 
 @dataclass
@@ -407,7 +407,7 @@ class ProperRateElevation:
 
             # Step 2: Calculate current heart rate
             original_intervals = np.diff(original_beats) / self.sampling_rate * 1000  # ms
-            current_rate = 60000 / np.median(original_intervals)
+            current_rate = MedtronicRateSmoothing.interval_to_rate(np.median(original_intervals))
 
             logger.info(f"   Current rate: {current_rate:.1f} bpm")
             logger.info(f"   Target rate: {target_rate_bpm} bpm")
@@ -429,7 +429,7 @@ class ProperRateElevation:
                 new_beats, _ = self.sensing_engine.detect_r_waves(resampled_signal)
                 if len(new_beats) >= 2:
                     new_intervals = np.diff(new_beats) / self.sampling_rate * 1000
-                    achieved_rate = 60000 / np.median(new_intervals)
+                    achieved_rate = MedtronicRateSmoothing.interval_to_rate(np.median(new_intervals))
 
                     logger.info(f"   ✓ Achieved rate: {achieved_rate:.1f} bpm")
 
@@ -494,7 +494,7 @@ class ProperRateElevation:
                 new_beats, _ = self.sensing_engine.detect_r_waves(result)
                 if len(new_beats) >= 2:
                     new_intervals = np.diff(new_beats) / self.sampling_rate * 1000
-                    achieved_rate = 60000 / np.median(new_intervals)
+                    achieved_rate = MedtronicRateSmoothing.interval_to_rate(np.median(new_intervals))
                     logger.info(f"   ✓ Achieved rate: {achieved_rate:.1f} bpm")
                     return result
                 else:
@@ -881,8 +881,8 @@ class MedtronicRateSmoothing:
         reference_interval = np.median(recent_smoothed)
 
         # Convert to rates for limiting calculation
-        current_rate = 60000.0 / interval_ms
-        reference_rate = 60000.0 / reference_interval
+        current_rate = self.interval_to_rate(interval_ms)
+        reference_rate = self.interval_to_rate(reference_interval)
 
         # Calculate maximum allowed rate change
         max_rate_change = self.max_rate_change_bpm
@@ -1179,7 +1179,7 @@ class TWaveProtection:
             # 1. Long intervals are 1.5-3x longer than short ones
             # 2. Short intervals suggest very fast rate (>180 bpm)
             # 3. Combined rate suggests reasonable underlying rhythm
-            short_rate = 60000 / short_mean if short_mean > 0 else 0
+            short_rate = MedtronicRateSmoothing.interval_to_rate(short_mean)
             combined_rate = 120000 / (short_mean + long_mean) if (short_mean + long_mean) > 0 else 0
 
             pattern_detected = (
@@ -1201,7 +1201,7 @@ class TWaveProtection:
 
         # Calculate recent rate
         avg_interval = sum(recent_intervals[-4:]) / len(recent_intervals[-4:])
-        current_rate = 60000 / avg_interval if avg_interval > 0 else 0
+        current_rate = MedtronicRateSmoothing.interval_to_rate(avg_interval)
 
         # If rate suggests oversensing, increase threshold
         if current_rate > self.oversensing_threshold_rate:
@@ -1236,7 +1236,7 @@ class TWaveProtection:
 
         avg_interval = sum(recent_intervals[-3:]) / len(recent_intervals[-3:])
         cycle_length = avg_interval  # In milliseconds
-        current_rate = 60000 / avg_interval if avg_interval > 0 else 0
+        current_rate = MedtronicRateSmoothing.interval_to_rate(avg_interval)
 
         # ============================================================================
         # MODIFIED: 2025-11-16 - Use fixed T-wave window at VF rates
@@ -1321,7 +1321,7 @@ class MedtronicPRLogic:
             if len(p_wave_candidates) > 1:
                 pp_intervals = np.diff(p_wave_candidates) / self.sampling_rate * 1000
                 stats['mean_pp_interval'] = np.mean(pp_intervals)
-                stats['atrial_rate'] = 60000 / stats['mean_pp_interval']
+                stats['atrial_rate'] = MedtronicRateSmoothing.interval_to_rate(stats['mean_pp_interval'])
 
             return p_wave_candidates, stats
 
@@ -1374,7 +1374,7 @@ class MedtronicPRLogic:
         if len(p_waves) >= 2:
             p_intervals = np.diff(p_waves)
             median_p_interval = np.median(p_intervals)
-            atrial_rate = 60000.0 / median_p_interval if median_p_interval > 0 else 0
+            atrial_rate = MedtronicRateSmoothing.interval_to_rate(median_p_interval)
         else:
             atrial_rate = 0
 
@@ -3062,7 +3062,7 @@ class MedtronicSensingEngine:
             if rate_elevated:
                 intervals = np.diff(r_waves) / self.sampling_rate * 1000
                 if len(intervals) > 0:
-                    detected_rate = 60000 / np.median(intervals)
+                    detected_rate = MedtronicRateSmoothing.interval_to_rate(np.median(intervals))
                     logger.info(
                         f"RATE ELEVATION VERIFICATION: Detected {detected_rate:.1f} bpm from {len(r_waves)} beats")
 
@@ -3298,7 +3298,7 @@ class MedtronicSensingEngine:
                 }
 
             # Calculate rate statistics
-            raw_rates = 60000 / raw_intervals
+            raw_rates = np.array([MedtronicRateSmoothing.interval_to_rate(interval) for interval in raw_intervals])
 
             # Extract smoothed intervals
             smoothed_intervals = []
@@ -3309,7 +3309,7 @@ class MedtronicSensingEngine:
 
             smoothed_rates = []
             if smoothed_intervals:
-                smoothed_rates = [60000 / interval for interval in smoothed_intervals if interval > 0]
+                smoothed_rates = [MedtronicRateSmoothing.interval_to_rate(interval) for interval in smoothed_intervals]
 
 
             # SNR calculation
@@ -3546,7 +3546,7 @@ class MedtronicSensingEngine:
                     current_rate = None
                     if len(recent_intervals_ms) > 0:
                         avg_interval = sum(recent_intervals_ms[-3:]) / len(recent_intervals_ms[-3:])
-                        current_rate = 60000 / avg_interval if avg_interval > 0 else 0
+                        current_rate = MedtronicRateSmoothing.interval_to_rate(avg_interval)
 
                     # Only apply T-wave protection at NON-VF rates
                     # At VF rates (>180 BPM), rely ONLY on refractory periods (authentic)
@@ -3642,7 +3642,7 @@ class MedtronicSensingEngine:
 
         if len(detected_beats) > 1:
             intervals = np.diff(detected_beats) / self.sampling_rate * 1000
-            rates = 60000 / intervals
+            rates = np.array([MedtronicRateSmoothing.interval_to_rate(interval) for interval in intervals])
             stats['median_rate'] = float(np.median(rates))
             total_progressive = sum(progressive_reductions.values())
             stats['progressive_reduction_percentage'] = (total_progressive / len(detected_beats)) * 100 if len(
