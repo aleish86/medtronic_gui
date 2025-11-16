@@ -546,24 +546,6 @@ class ProperRateElevation:
             logger.error(f"Method 3 failed: {e}")
             return self._fallback_compression(signal_data, target_rate_bpm)
 
-    def _detect_beats_simple(self, signal_data: np.ndarray) -> list:
-        """Simple beat detection for rate calculation"""
-        try:
-            # Use simple peak detection
-            from scipy.signal import find_peaks
-
-            # Find peaks above 75th percentile
-            threshold = np.percentile(np.abs(signal_data), 75)
-            peaks, _ = find_peaks(np.abs(signal_data),
-                                  height=threshold,
-                                  distance=int(0.3 * self.sampling_rate))  # Min 300ms between beats
-
-            return peaks.tolist()
-
-        except Exception as e:
-            logger.warning(f"Simple beat detection failed: {e}")
-            return []
-
     def _fallback_compression(self, signal_data: np.ndarray, target_rate_bpm: int) -> np.ndarray:
         """Fallback compression method"""
         logger.info(f"🔧 FALLBACK: Simple compression to {target_rate_bpm} bpm")
@@ -2814,62 +2796,6 @@ class MedtronicSensingEngine:
 
         return cache_key
 
-    def detect_r_waves_cached(self, signal_data: np.ndarray, lead_name: str = 'unknown',
-                              sensitivity: float = 0.75) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Detect R-waves with caching to avoid redundant computation
-
-        MODIFIED: 2025-11-16
-        REASON: Same signals processed multiple times in offline analysis
-        CHANGE: Check cache before detection, store results for reuse
-        IMPACT: 10-20% speedup by avoiding redundant R-wave detection
-        WHY: Offline analysis optimization; real ICD doesn't need this (real-time)
-        NOTE: Detection algorithm unchanged - only caching the results
-
-        Args:
-            signal_data: Input signal
-            lead_name: Lead identifier (e.g., 'RVbip', 'BipECG')
-            sensitivity: Detection sensitivity threshold
-
-        Returns:
-            Tuple of (r_peak_locations, r_peak_amplitudes)
-        """
-        # Create cache key with lead differentiation
-        cache_key = self._create_signal_cache_key(signal_data, lead_name,
-                                                   sensitivity, self.sampling_rate)
-
-        # Check cache
-        if cache_key in self.rpeak_cache:
-            self.cache_hits += 1
-            if self.cache_hits % 10 == 0:  # Log every 10th hit
-                logger.debug(f"[R-WAVE CACHE] Hits: {self.cache_hits}, Misses: {self.cache_misses}, "
-                           f"Hit rate: {100*self.cache_hits/(self.cache_hits+self.cache_misses):.1f}%")
-            return self.rpeak_cache[cache_key]
-
-        # Cache miss - perform actual R-wave detection
-        self.cache_misses += 1
-
-        # Call the original detection method (authentic Medtronic logic)
-        rpeak_locs, rpeak_amps = self.detect_r_waves(signal_data, sensitivity)
-
-        # Store in cache for future use
-        self.rpeak_cache[cache_key] = (rpeak_locs, rpeak_amps)
-
-        return rpeak_locs, rpeak_amps
-
-    def clear_rpeak_cache(self):
-        """
-        Clear R-wave detection cache
-
-        MODIFIED: 2025-11-16
-        Call this between patients or analysis runs to free memory
-        """
-        self.rpeak_cache.clear()
-        logger.info(f"R-wave cache cleared. Stats - Hits: {self.cache_hits}, "
-                   f"Misses: {self.cache_misses}")
-        self.cache_hits = 0
-        self.cache_misses = 0
-
     def apply_simple_agc(self, signal_data: np.ndarray, target_amplitude: float = 2.0) -> Tuple[np.ndarray, float]:
         """
         Simple AGC - scales signal to target amplitude
@@ -3868,19 +3794,6 @@ class MedtronicVTVFDetector:
 
         return False
 
-
-    def find_first_false_then_3_true(self, dq):
-        """Find the FIRST occurrence where False is followed by 3 consecutive True values"""
-        if len(dq) < 4:
-            return None
-
-        for i in range(len(dq) - 3):
-            if (not dq[i] and  # False
-                    dq[i + 1] and  # True
-                    dq[i + 2] and  # True
-                    dq[i + 3]):  # True
-                return i + 1  # Return index of first True and stop
-        return None
 
     def add_interval(self, raw_interval_ms: float, patient_id: str = None,
                      signal_data: np.ndarray = None, r_wave_indices: list = None,
