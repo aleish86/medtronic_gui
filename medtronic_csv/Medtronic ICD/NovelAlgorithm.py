@@ -26,6 +26,7 @@ from scipy import signal, interpolate
 from scipy.signal import butter, filtfilt, medfilt, savgol_filter
 from scipy.stats import pearsonr
 from collections import defaultdict, deque, namedtuple
+from itertools import combinations
 from dataclasses import dataclass, field, asdict
 import traceback
 import pywt
@@ -476,10 +477,9 @@ class ProperRateElevation:
             # Create new signal with compressed intervals
             new_signal = []
 
-            for i in range(len(beats) - 1):
+            # PYTHONIC: Use zip() instead of range(len())
+            for start_idx, end_idx in zip(beats[:-1], beats[1:]):
                 # Get beat segment
-                start_idx = beats[i]
-                end_idx = beats[i + 1]
                 segment = signal_data[start_idx:end_idx]
 
                 # Resample segment to target interval
@@ -1000,9 +1000,10 @@ class SNRCalculator:
         noise_segments = []
         buffer_samples = int(0.05 * self.sampling_rate)  # 50ms buffer
 
-        for i in range(len(r_wave_indices) - 1):
-            start_idx = r_wave_indices[i] + buffer_samples
-            end_idx = r_wave_indices[i + 1] - buffer_samples
+        # PYTHONIC: Use zip() instead of range(len())
+        for current_r, next_r in zip(r_wave_indices[:-1], r_wave_indices[1:]):
+            start_idx = current_r + buffer_samples
+            end_idx = next_r - buffer_samples
 
             if end_idx > start_idx:
                 noise_segment = signal_data[start_idx:end_idx]
@@ -1936,12 +1937,11 @@ class MedtronicWavelet:
             return False
 
         # Calculate pairwise correlations
-        correlations = []
-
-        for i in range(len(morphologies)):
-            for j in range(i + 1, len(morphologies)):
-                corr = self._calculate_correlation(morphologies[i], morphologies[j])
-                correlations.append(corr)
+        # PYTHONIC: Use itertools.combinations() instead of nested range loops
+        correlations = [
+            self._calculate_correlation(morph_i, morph_j)
+            for morph_i, morph_j in combinations(morphologies, 2)
+        ]
 
         # Check if enough pairs meet threshold
         good_correlations = sum(1 for c in correlations if c >= self.min_correlation_for_template)
@@ -3025,9 +3025,10 @@ class MedtronicSensingEngine:
 
         # Calculate noise between beats
         noise_segments = []
-        for i in range(len(arr_r_waves) - 1):
-            start = arr_r_waves[i] + int(0.1 * self.sampling_rate)  # 100ms after R
-            end = arr_r_waves[i + 1] - int(0.05 * self.sampling_rate)  # 50ms before next R
+        # PYTHONIC: Use zip() instead of range(len())
+        for current_wave, next_wave in zip(arr_r_waves[:-1], arr_r_waves[1:]):
+            start = current_wave + int(0.1 * self.sampling_rate)  # 100ms after R
+            end = next_wave - int(0.05 * self.sampling_rate)  # 50ms before next R
             if start < end:
                 noise_segments.extend(signal[start:end])
 
@@ -3343,16 +3344,18 @@ class MedtronicSensingEngine:
                         list(raw_intervals)
                     )
 
+                    # PYTHONIC: Extract markers once to avoid nested .get() calls
+                    markers = lia_analysis.get('markers', {})
+                    marker_keys = ['high_npi_density', 'consecutive_npis', 'rail_to_rail_noise',
+                                   'chaotic_pattern', 'bimodal_distribution']
+
+                    # PYTHONIC: Use dict comprehension with ** unpacking
                     lia_result = {
                         'lia_performed': lia_analysis.get('detection_possible', False),
                         'lia_lead_issue_detected': lia_analysis.get('lead_issue_detected', False),
                         'lia_confidence': lia_analysis.get('confidence', 0.0),
                         'lia_recommendation': lia_analysis.get('recommendation', 'Not Performed'),
-                        'lia_high_npi_density': lia_analysis.get('markers', {}).get('high_npi_density', False),
-                        'lia_consecutive_npis': lia_analysis.get('markers', {}).get('consecutive_npis', False),
-                        'lia_rail_to_rail_noise': lia_analysis.get('markers', {}).get('rail_to_rail_noise', False),
-                        'lia_chaotic_pattern': lia_analysis.get('markers', {}).get('chaotic_pattern', False),
-                        'lia_bimodal_distribution': lia_analysis.get('markers', {}).get('bimodal_distribution', False),
+                        **{f'lia_{key}': markers.get(key, False) for key in marker_keys},
                         'lia_intervals_analyzed': len(raw_intervals)
                     }
 
@@ -4554,7 +4557,7 @@ class MedtronicVTVFDetector:
             'detection_time': self.detection_time,
             'detection_rate': self.detection_rate if self.detection_rate else 0.0,
             'detection_type': detection_type,
-            'vt_consecutive_count': self.vt_consecutive_count,
+            'vt_consecutive': self.vt_consecutive_count,
             'total_beats': self.beat_count,
             'vt_window_start_beat': vt_window_start,
             'vf_window_start_beat': vf_window_start,
@@ -5660,10 +5663,12 @@ class HaemodynamicAnalyser:
         """Calculate noise in laser signal between beats"""
         noise_segments = []
 
-        for i in range(len(beats) - 1):
+        # PYTHONIC: Use zip() instead of range(len())
+        for current_beat, next_beat in zip(beats[:-1], beats[1:]):
             # Sample between beats (avoiding peak regions)
-            start = beats[i] + int(0.2 * (beats[i + 1] - beats[i]))
-            end = beats[i + 1] - int(0.2 * (beats[i + 1] - beats[i]))
+            beat_interval = next_beat - current_beat
+            start = current_beat + int(0.2 * beat_interval)
+            end = next_beat - int(0.2 * beat_interval)
             if start < end < len(laser_signal):
                 noise_segments.extend(laser_signal[start:end])
 
@@ -5985,10 +5990,8 @@ class HaemodynamicAnalyser:
             bp_systolic_values = []
             bp_mean_values = []
 
-            for i in range(len(r_waves) - 1):
-                beat_start = r_waves[i]
-                beat_end = r_waves[i + 1]
-
+            # PYTHONIC: Use zip() instead of range(len())
+            for beat_start, beat_end in zip(r_waves[:-1], r_waves[1:]):
                 if beat_end >= len(bp_signal):
                     continue
 
