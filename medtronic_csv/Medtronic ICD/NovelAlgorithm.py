@@ -756,6 +756,24 @@ class MedtronicRateSmoothing:
         self.ectopics_filtered = 0
         self.rate_limited_beats = 0
 
+    # ============================================================================
+    # REFACTORED: 2025-11-16 - Helper method to reduce code duplication
+    # REASON: Formula "60000 / interval" appears 15+ times in codebase
+    # BENEFIT: Single source of truth for interval→rate conversion
+    # ============================================================================
+    @staticmethod
+    def interval_to_rate(interval_ms: float) -> float:
+        """
+        Convert RR interval (ms) to heart rate (bpm)
+
+        Args:
+            interval_ms: RR interval in milliseconds
+
+        Returns:
+            Heart rate in beats per minute (0 if interval invalid)
+        """
+        return 60000.0 / interval_ms if interval_ms > 0 else 0.0
+
     def reset(self):
         """Reset all smoothing state"""
         self.raw_intervals.clear()
@@ -786,7 +804,7 @@ class MedtronicRateSmoothing:
         self.raw_intervals.append(interval_ms)
 
         # Convert to rate for analysis
-        raw_rate_bpm = 60000.0 / interval_ms
+        raw_rate_bpm = self.interval_to_rate(interval_ms)
 
         # Step 1: Detect and handle ectopic beats
         is_ectopic, ectopic_reason = self._detect_ectopic_beat(interval_ms)
@@ -798,7 +816,7 @@ class MedtronicRateSmoothing:
         smoothed_interval = self._apply_smoothing_filter(rate_limited_interval, is_ectopic)
 
         # Step 4: Update rate history and trend analysis
-        smoothed_rate_bpm = 60000.0 / smoothed_interval if smoothed_interval > 0 else 0
+        smoothed_rate_bpm = self.interval_to_rate(smoothed_interval)
         self.rate_history.append(smoothed_rate_bpm)
         self._update_trend_analysis()
 
@@ -952,7 +970,7 @@ class MedtronicRateSmoothing:
         return {
             'raw_interval_ms': raw_interval,
             'smoothed_interval_ms': smoothed_interval,
-            'raw_rate_bpm': 60000.0 / raw_interval if raw_interval > 0 else 0,
+            'raw_rate_bpm': self.interval_to_rate(raw_interval),
             'smoothed_rate_bpm': smoothed_rate,
             'is_ectopic': is_ectopic,
             'ectopic_reason': ectopic_reason,
