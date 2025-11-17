@@ -10155,9 +10155,19 @@ def create_visualizations_batch(analyser: MedtronicICDAnalyser,
         processed_episodes.add(episode_key)
 
         try:
-            # Convert row to dictionary for visualization
-            # The row already has all the data we need from the CSV results
-            result_dict = row.to_dict()
+            # Find the matching result from analyser.results (contains full data including signals)
+            result_dict = None
+            for result in analyser.results:
+                if (result.get('patient_id') == patient_id and
+                    result.get('label') == label and
+                    result.get('signal_type') == signal_type):
+                    result_dict = result
+                    break
+
+            if result_dict is None:
+                # Fallback to DataFrame row if not found in analyser.results
+                logger.warning(f"  Result not found in analyser.results, using DataFrame row")
+                result_dict = row.to_dict()
 
             logger.info(f"\nProcessing {episode_key} ({signal_type}):")
 
