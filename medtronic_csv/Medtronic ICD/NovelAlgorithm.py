@@ -2780,7 +2780,8 @@ class MedtronicSensingEngine:
             signal_data = signal_data - signal_baseline
 
             # Apply AGC to this specific signal
-            target_amplitude = 3.0 if signal_type == 'EGM' else 2.0
+            # Use same target amplitude for both EGM and ECG to ensure consistent detection
+            target_amplitude = 3.0
             signal_data, gain_applied = self.apply_simple_agc(signal_data, target_amplitude)
 
             # Apply enhanced filtering with artefact removal
