@@ -197,6 +197,39 @@ class PRAssociationResult:
 
 
 @dataclass
+class AnalysisResults:
+    """
+    Complete analysis results including both CSV output and intermediate data.
+    This allows further processing (like combined signal analysis) while keeping
+    CSVResults clean for CSV output only.
+    """
+    csv_results: 'CSVResults'  # Forward reference since CSVResults is defined below
+    combined_signal: np.ndarray = field(default_factory=lambda: np.array([]))
+    r_wave_indices: List[int] = field(default_factory=list)
+
+    def __getattr__(self, name):
+        """Delegate attribute access to csv_results for convenience"""
+        if name in ('csv_results', 'combined_signal', 'r_wave_indices'):
+            # These are our own fields - if we're here, they don't exist (shouldn't happen)
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        # Delegate to csv_results for all other attributes
+        return getattr(self.csv_results, name)
+
+    def __setattr__(self, name, value):
+        """Delegate attribute setting to csv_results for convenience"""
+        if name in ('csv_results', 'combined_signal', 'r_wave_indices'):
+            # Set our own fields normally
+            object.__setattr__(self, name, value)
+        else:
+            # Delegate to csv_results for all other attributes
+            if hasattr(self, 'csv_results'):
+                setattr(self.csv_results, name, value)
+            else:
+                # During initialization, before csv_results is set
+                object.__setattr__(self, name, value)
+
+
+@dataclass
 class CSVResults:
     """Enhanced dataclass for CSV results - single source of truth for all output fields"""
     # Basic identification
@@ -3304,7 +3337,6 @@ class MedtronicSensingEngine:
                 'detection_type': detection_status.get('detection_type', 'None'),
                 'vt_detected': detection_status.get('vt_detected', False),
                 'vf_detected': detection_status.get('vf_detected', False),
-                'vt_consecutive': detection_status.get('vt_consecutive', 0),
 
                 # Enhanced fields
                 'group': signal_group,
@@ -7607,15 +7639,18 @@ class MedtronicICDAnalyser:
                 return original_result
 
             # Use the combined signals and R-waves for haemodynamic gating
+            # Extract R-wave indices from the analysis_result dictionary (before it was converted to CSVResults)
+            r_wave_indices = analysis_result.get('r_wave_indices', [])
+
             haemodynamic_signals['gating_signal'] = combined_main_signal
-            haemodynamic_signals['gating_r_waves'] = original_result.r_wave_indices if original_result.r_wave_indices else []
+            haemodynamic_signals['gating_r_waves'] = r_wave_indices if r_wave_indices else []
             haemodynamic_signals['gating_lead'] = selected_lead
 
             # Run haemodynamic analysis at baseline
             logger.info(f"  Analysing baseline haemodynamics...")
             baseline_haemodynamics = self.haemodynamic_analyser.analyse_haemodynamics_at_detection_fixed(
                 gating_signal=combined_main_signal,
-                gating_r_waves=original_result.r_wave_indices if original_result.r_wave_indices else [],
+                gating_r_waves=r_wave_indices if r_wave_indices else [],
                 gating_lead=selected_lead,
                 laser1_signal=haemodynamic_signals['laser1_signal'],
                 laser2_signal=haemodynamic_signals['laser2_signal'],
@@ -7630,7 +7665,7 @@ class MedtronicICDAnalyser:
                 logger.info(f"  Analysing arrhythmia haemodynamics...")
                 arrhythmia_haemodynamics = self.haemodynamic_analyser.analyse_haemodynamics_at_detection_fixed(
                     gating_signal=combined_main_signal,
-                    gating_r_waves=original_result.r_wave_indices if original_result.r_wave_indices else [],
+                    gating_r_waves=r_wave_indices if r_wave_indices else [],
                     gating_lead=selected_lead,
                     laser1_signal=haemodynamic_signals['laser1_signal'],
                     laser2_signal=haemodynamic_signals['laser2_signal'],
@@ -7719,10 +7754,10 @@ class MedtronicICDAnalyser:
     def _build_analysis_result(self, patient_id: str, label: str, selected_lead: str,
                                signal_type: str, pacing_mode: str, signal_group: str,
                                analysis_result: Dict[str, Any], combined_signal: np.ndarray,
-                               signal_was_elevated: bool) -> CSVResults:
+                               signal_was_elevated: bool) -> AnalysisResults:
         """
-        Build analysis result using CSVResults dataclass.
-        Returns CSVResults instance with type safety and IDE autocomplete.
+        Build analysis result using AnalysisResults dataclass.
+        Returns AnalysisResults instance containing CSVResults plus intermediate data for further processing.
         """
         # Extract timing and metrics
         time_to_detection_beats = analysis_result.get('detection_time_from_window_start', 0)
@@ -7757,7 +7792,7 @@ class MedtronicICDAnalyser:
             return str(val) if val is not None else ""
 
         # Create CSVResults instance with type safety
-        return CSVResults(
+        csv_results = CSVResults(
             # Basic identification
             patient_id=patient_id,
             label=label,
@@ -7847,6 +7882,13 @@ class MedtronicICDAnalyser:
 
             # Signal processing flags
             rate_elevation_synchronized=signal_was_elevated,
+        )
+
+        # Wrap CSVResults with intermediate data in AnalysisResults
+        return AnalysisResults(
+            csv_results=csv_results,
+            combined_signal=combined_signal,
+            r_wave_indices=analysis_result.get('r_wave_indices', [])
         )
 
     def _has_haemodynamic_data(self, episode_rows: List) -> bool:
@@ -8320,13 +8362,16 @@ class MedtronicICDAnalyser:
         if not results:
             logger.warning(f"NO VALID RESULTS: {label_key} - no leads could be analysed")
 
-        return results
+        # Extract CSVResults from AnalysisResults for final output
+        csv_results_list = [result.csv_results for result in results]
+        return csv_results_list
 
     def analyse_combined_signal(self, patient_id: str, label: str, episode_rows: List[pd.Series],
                                 baseline_rows: List[pd.Series], arrhythmia_rows: List[pd.Series],
-                                rv_result: Optional[CSVResults], bip_result: Optional[CSVResults]) -> Optional[CSVResults]:
+                                rv_result: Optional[AnalysisResults], bip_result: Optional[AnalysisResults]) -> Optional[AnalysisResults]:
         """
         NEW: Analyse combined ECG and EGM signals to select optimal lead
+        Now uses AnalysisResults which contains both CSV output and intermediate signal data.
         """
         try:
             logger.info(f"=== ANALYSING COMBINED SIGNAL FOR {patient_id}_{label} ===")
@@ -8668,7 +8713,7 @@ class MedtronicICDAnalyser:
     def _build_combined_result(self, patient_id: str, label: str, episode_rows: List[pd.Series],
                                baseline_rows: List[pd.Series], arrhythmia_rows: List[pd.Series],
                                primary_lead_info: Dict[str, Any],
-                               signal_candidates: List[Dict[str, Any]]) -> Optional[CSVResults]:
+                               signal_candidates: List[Dict[str, Any]]) -> Optional[AnalysisResults]:
         """
         Build combined signal result using primary lead for analysis
         """
