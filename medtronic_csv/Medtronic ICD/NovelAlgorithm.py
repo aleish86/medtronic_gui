@@ -377,6 +377,10 @@ class CSVResults:
                 result[field_name] = field_value
         return result
 
+    def get(self, key: str, default=None):
+        """Dict-like get() method for backwards compatibility"""
+        return getattr(self, key, default)
+
 
 HaemodynamicResults = namedtuple('HaemodynamicResults', [
     'laser1_magic', 'laser1_confidence', 'laser1_mean',
