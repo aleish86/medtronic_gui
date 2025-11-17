@@ -10155,21 +10155,21 @@ def create_visualizations_batch(analyser: MedtronicICDAnalyser,
         processed_episodes.add(episode_key)
 
         try:
-            # Get the result dictionary from analyser
-            if idx < len(analyser.results):
-                result_dict = analyser.results[idx]
+            # Convert row to dictionary for visualization
+            # The row already has all the data we need from the CSV results
+            result_dict = row.to_dict()
 
-                logger.info(f"\nProcessing {episode_key} ({signal_type}):")
+            logger.info(f"\nProcessing {episode_key} ({signal_type}):")
 
-                # Create all three plots
-                success = viz.create_episode_plots(analyser, result_dict, viz_path)
+            # Create all three plots
+            success = viz.create_episode_plots(analyser, result_dict, viz_path)
 
-                if success:
-                    successful_plots += 1
-                    logger.info(f"  ✓ Successfully created all plots")
-                else:
-                    failed_plots += 1
-                    logger.warning(f"  ✗ Failed to create plots")
+            if success:
+                successful_plots += 1
+                logger.info(f"  ✓ Successfully created all plots")
+            else:
+                failed_plots += 1
+                logger.warning(f"  ✗ Failed to create plots")
 
         except Exception as e:
             logger.error(f"  ✗ Error processing {episode_key}: {e}")
