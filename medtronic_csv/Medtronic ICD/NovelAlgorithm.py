@@ -223,7 +223,12 @@ class AnalysisResults:
         else:
             # Delegate to csv_results for all other attributes
             if hasattr(self, 'csv_results'):
-                setattr(self.csv_results, name, value)
+                try:
+                    setattr(self.csv_results, name, value)
+                except AttributeError:
+                    # CSVResults doesn't have this field - silently ignore
+                    # This happens when old code tries to set fields that were removed
+                    pass
             else:
                 # During initialization, before csv_results is set
                 object.__setattr__(self, name, value)
