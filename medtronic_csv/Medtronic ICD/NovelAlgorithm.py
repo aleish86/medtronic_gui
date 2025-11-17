@@ -8852,7 +8852,10 @@ class MedtronicICDAnalyser:
             ecg_r_peaks = None
             if ecg_signal is not None:
                 # Condition the ECG signal (bandpass filter)
-                conditioned_ecg = self.sensing_engine.condition_signal(ecg_signal)
+                ecg_signal_id = f"{patient_id}_ECG_combined"
+                conditioned_ecg = self.sensing_engine.signal_conditioning(
+                    ecg_signal, 'ECG', signal_group, ecg_signal_id
+                )
                 # Detect R-peaks on the synchronized ECG signal
                 ecg_r_peaks, _ = self.sensing_engine.detect_r_waves(conditioned_ecg, bypass_cache=signal_was_elevated)
                 logger.info(f"  Detected {len(ecg_r_peaks)} ECG R-peaks on synchronized signal")
