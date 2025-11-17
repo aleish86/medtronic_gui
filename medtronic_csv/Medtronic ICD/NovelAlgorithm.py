@@ -8367,9 +8367,19 @@ class MedtronicICDAnalyser:
         if not results:
             logger.warning(f"NO VALID RESULTS: {label_key} - no leads could be analysed")
 
-        # Extract CSVResults from AnalysisResults for final output
-        csv_results_list = [result.csv_results for result in results]
-        return csv_results_list
+        # Convert AnalysisResults to dictionaries for storage
+        # This preserves both CSV fields and intermediate data (signal, r_peaks)
+        results_dicts = []
+        for result in results:
+            # Create dict from CSVResults fields
+            from dataclasses import asdict
+            result_dict = asdict(result.csv_results)
+            # Add intermediate data
+            result_dict['combined_signal'] = result.combined_signal
+            result_dict['r_wave_indices'] = result.r_wave_indices
+            results_dicts.append(result_dict)
+
+        return results_dicts
 
     def analyse_combined_signal(self, patient_id: str, label: str, episode_rows: List[pd.Series],
                                 baseline_rows: List[pd.Series], arrhythmia_rows: List[pd.Series],
@@ -9134,8 +9144,16 @@ class MedtronicICDAnalyser:
             logger.warning("No results to save")
             return
 
-        # Convert CSVResults objects to dictionaries
-        results_dicts = [result.to_dict() for result in self.results]
+        # Convert CSVResults objects to dictionaries (if not already dicts)
+        results_dicts = []
+        for result in self.results:
+            if isinstance(result, dict):
+                # Remove intermediate data fields before saving to CSV
+                csv_dict = {k: v for k, v in result.items()
+                           if k not in ['combined_signal', 'r_wave_indices']}
+                results_dicts.append(csv_dict)
+            else:
+                results_dicts.append(result.to_dict())
 
         # Create DataFrame from results
         results_df = pd.DataFrame(results_dicts)
@@ -9327,6 +9345,13 @@ class VisualizationModule:
             signal_type = result_dict.get('signal_type', 'EGM')
             leads_used = result_dict.get('leads_used', 'Unknown')
 
+        except:
+            patient_id = result_dict.get('patient_id')
+            label = result_dict.get('label')
+            signal_type = result_dict.get('signal_type', 'EGM')
+            leads_used = result_dict.get('leads_used', 'Unknown')
+
+        try:
             # Create output directory
             Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -9336,8 +9361,12 @@ class VisualizationModule:
             if signal_type == 'EGM':
                 ecg_data = self._get_ecg_data_for_episode(analyser, patient_id, label)
                 if ecg_data:
-                    result_dict['ecg_signal'] = ecg_data['signal']
-                    result_dict['ecg_r_peaks'] = ecg_data['r_peaks']
+                    try:
+                        result_dict['ecg_signal'] = ecg_data['signal']
+                        result_dict['ecg_r_peaks'] = ecg_data['r_peaks']
+                    except:
+                        result_dict.get('ecg_signal', None)
+                        result_dict.get('ecg_r_peaks', [])
 
             # Plot 1: Primary signal with R-peaks (now shows full trace for both leads)
             self._plot_signal_with_rpeaks(result_dict, output_dir)
@@ -9538,8 +9567,8 @@ class VisualizationModule:
                                  output_dir: str):
         """Plot 2: Enhanced wavelet analysis visualization with corrected matching"""
         try:
-            patient_id = result_dict['patient_id']
-            label = result_dict['label']
+            patient_id = result_dict.get('patient_id')
+            label = result_dict.get('label', 'Unknown')
             signal_type = result_dict.get('signal_type', 'EGM')
             leads_used = result_dict.get('leads_used', 'Unknown')
             wavelet_lead_used = result_dict.get('wavelet_lead_used', 'Unknown')
@@ -10144,7 +10173,7 @@ def create_visualizations_batch(analyser: MedtronicICDAnalyser,
             continue
 
         # Prefer EGM results over ECG for primary processing
-        if signal_type == 'ECG':
+        if signal_type == 'Combined':
             # Check if there's an EGM result for this episode
             egm_results = results_df[(results_df['patient_id'] == patient_id) &
                                      (results_df['label'] == label) &
