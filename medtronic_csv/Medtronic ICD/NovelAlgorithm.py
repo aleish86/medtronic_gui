@@ -8720,7 +8720,14 @@ class MedtronicICDAnalyser:
                                primary_lead_info: Dict[str, Any],
                                signal_candidates: List[Dict[str, Any]]) -> Optional[AnalysisResults]:
         """
-        Build combined signal result using primary lead for analysis
+        Build combined signal result using primary lead for analysis.
+
+        NEW: ICD-like synchronized signal processing:
+        1. Load all signals fresh from episode_rows
+        2. Apply rate elevation to ALL signals together (if needed)
+        3. Detect R-peaks on all elevated signals (synchronized time base)
+
+        This ensures ECG and EGM peaks are on the same time base for proper alignment.
         """
         try:
             logger.info(f"  Building combined result with primary lead: {primary_lead_info['lead']}")
@@ -8731,56 +8738,56 @@ class MedtronicICDAnalyser:
             should_elevate, target_rate = self.should_elevate_rate(episode_rows)
             has_atrial_data = self.has_atrial_data_in_episode(episode_rows)
 
-            # Get the primary signal
-            primary_signal = primary_lead_info['signal']
-            primary_r_peaks = primary_lead_info['r_peaks']
+            # === STEP 1: Load ALL raw signals from episode_rows ===
+            logger.info(f"  Loading all signals fresh from episode data...")
+
+            # Load primary signal (EGM)
+            primary_lead = primary_lead_info['lead']
             primary_type = primary_lead_info['type']
+            primary_segments = []
+            for row in episode_rows:
+                segment = self.load_signal_segment(patient_id, row, primary_lead)
+                if segment and segment.get('signal') is not None:
+                    primary_segments.append(segment['signal'])
 
-            # Get wavelet signal (prefer RVshock if available, otherwise use primary)
-            wavelet_signal = primary_signal
-            wavelet_lead = primary_lead_info['lead']
+            if not primary_segments:
+                logger.error(f"  Failed to load primary signal: {primary_lead}")
+                return None
+            primary_signal = np.concatenate(primary_segments)
 
-            # Check if RVshock is available for wavelet
+            # Load ECG signal (BipECG)
+            ecg_signal = None
+            ecg_lead = None
             for candidate in signal_candidates:
-                if candidate['lead'] == 'RVshock':
-                    wavelet_signal = candidate['signal']
-                    wavelet_lead = 'RVshock'
-                    logger.info(f"  Using RVshock for wavelet discrimination")
+                if candidate['type'] == 'ECG':
+                    ecg_lead = candidate['lead']
+                    ecg_segments = []
+                    for row in episode_rows:
+                        segment = self.load_signal_segment(patient_id, row, ecg_lead)
+                        if segment and segment.get('signal') is not None:
+                            ecg_segments.append(segment['signal'])
+
+                    if ecg_segments:
+                        ecg_signal = np.concatenate(ecg_segments)
+                        logger.info(f"  Loaded ECG signal: {ecg_lead} ({len(ecg_signal)} samples)")
                     break
 
-            # Apply rate elevation if needed
-            if should_elevate:
-                logger.info(f"  Applying rate elevation to {target_rate} bpm")
-                # Elevate primary signal
-                elevated_signal, detection_achieved, achieved_rate = self.modify_signal_for_rate_elevation(
-                    primary_signal, target_rate, self.sampling_rate,
-                    patient_id, primary_type, signal_group
-                )
+            # Load wavelet signal (prefer RVshock if available, otherwise use primary)
+            wavelet_signal = primary_signal
+            wavelet_lead = primary_lead
+            for candidate in signal_candidates:
+                if candidate['lead'] == 'RVshock':
+                    rvshock_segments = []
+                    for row in episode_rows:
+                        segment = self.load_signal_segment(patient_id, row, 'RVshock')
+                        if segment and segment.get('signal') is not None:
+                            rvshock_segments.append(segment['signal'])
 
-                # Calculate resampling factor
-                resampling_factor = len(elevated_signal) / len(primary_signal)
-
-                # Load and resample haemodynamic signals if available
-                if self._has_haemodynamic_data(episode_rows):
-                    haemodynamic_signals = self._load_haemodynamic_signals_with_resampling(
-                        patient_id, baseline_rows, arrhythmia_rows,
-                        resampling_factor=resampling_factor
-                    )
-
-                # Also elevate wavelet signal if different
-                if wavelet_lead != primary_lead_info['lead']:
-                    wavelet_elevated, _, _ = self.modify_signal_for_rate_elevation(
-                        wavelet_signal, target_rate, self.sensing_engine.sampling_rate,
-                        patient_id, 'EGM', signal_group
-                    )
-                    wavelet_signal = wavelet_elevated
-                else:
-                    wavelet_signal = elevated_signal
-
-                primary_signal = elevated_signal
-                signal_was_elevated = True
-            else:
-                signal_was_elevated = False
+                    if rvshock_segments:
+                        wavelet_signal = np.concatenate(rvshock_segments)
+                        wavelet_lead = 'RVshock'
+                        logger.info(f"  Using RVshock for wavelet discrimination")
+                    break
 
             # Load atrial signal if available
             atrial_signal = None
@@ -8794,24 +8801,65 @@ class MedtronicICDAnalyser:
 
                 if atrial_segments:
                     atrial_signal = np.concatenate(atrial_segments)
-                    if signal_was_elevated:
-                        # Apply same elevation to atrial signal
-                        atrial_signal = signal.resample(atrial_signal, len(primary_signal))
+                    logger.info(f"  Loaded atrial signal ({len(atrial_signal)} samples)")
 
-            # Get ECG signal for zero-crossing analysis
-            ecg_signal = None
+            # === STEP 2: Apply rate elevation to ALL signals together (if needed) ===
+            signal_was_elevated = False
+            if should_elevate:
+                logger.info(f"  Applying synchronized rate elevation to {target_rate} bpm for ALL signals...")
+
+                # Elevate primary signal
+                elevated_primary, detection_achieved, achieved_rate = self.modify_signal_for_rate_elevation(
+                    primary_signal, target_rate, self.sampling_rate,
+                    patient_id, primary_type, signal_group
+                )
+
+                # Calculate resampling factor from primary signal
+                resampling_factor = len(elevated_primary) / len(primary_signal)
+                logger.info(f"  Resampling factor: {resampling_factor:.4f}")
+
+                # Apply same resampling to ECG signal
+                if ecg_signal is not None:
+                    ecg_signal = signal.resample(ecg_signal, len(elevated_primary))
+                    logger.info(f"  Elevated ECG signal to {len(ecg_signal)} samples")
+
+                # Apply same resampling to wavelet signal (if different from primary)
+                if wavelet_lead != primary_lead:
+                    wavelet_signal = signal.resample(wavelet_signal, len(elevated_primary))
+                    logger.info(f"  Elevated wavelet signal to {len(elevated_primary)} samples")
+                else:
+                    wavelet_signal = elevated_primary
+
+                # Apply same resampling to atrial signal
+                if atrial_signal is not None:
+                    atrial_signal = signal.resample(atrial_signal, len(elevated_primary))
+                    logger.info(f"  Elevated atrial signal to {len(elevated_primary)} samples")
+
+                # Load and resample haemodynamic signals if available
+                if self._has_haemodynamic_data(episode_rows):
+                    haemodynamic_signals = self._load_haemodynamic_signals_with_resampling(
+                        patient_id, baseline_rows, arrhythmia_rows,
+                        resampling_factor=resampling_factor
+                    )
+
+                primary_signal = elevated_primary
+                signal_was_elevated = True
+
+            # === STEP 3: Detect R-peaks on ALL synchronized signals ===
+            logger.info(f"  Detecting R-peaks on synchronized signals...")
+
+            # Detect ECG R-peaks on the synchronized/elevated ECG signal
             ecg_r_peaks = None
-            for candidate in signal_candidates:
-                if candidate['type'] == 'ECG':
-                    ecg_signal = candidate['signal']
-                    ecg_r_peaks = candidate['r_peaks']
-                    if signal_was_elevated and ecg_signal is not None:
-                        # Apply same elevation to ECG
-                        ecg_signal = signal.resample(ecg_signal, len(primary_signal))
-                    break
+            if ecg_signal is not None:
+                # Condition the ECG signal (bandpass filter)
+                conditioned_ecg = self.sensing_engine.condition_signal(ecg_signal)
+                # Detect R-peaks on the synchronized ECG signal
+                ecg_r_peaks, _ = self.sensing_engine.detect_r_waves(conditioned_ecg, bypass_cache=signal_was_elevated)
+                logger.info(f"  Detected {len(ecg_r_peaks)} ECG R-peaks on synchronized signal")
 
             # Run main analysis using primary signal
-            logger.info(f"  Running main analysis with {primary_lead_info['lead']}...")
+            # Primary R-peaks will be detected during analyse_episode
+            logger.info(f"  Running main analysis with {primary_lead}...")
             analysis_result = self.sensing_engine.analyse_episode(
                 primary_signal,
                 patient_id,
@@ -8824,8 +8872,14 @@ class MedtronicICDAnalyser:
                 wavelet_lead=wavelet_lead
             )
 
+            # Extract primary R-peaks from analysis result
+            primary_r_peaks = analysis_result.get('r_wave_indices', [])
+            logger.info(f"  Primary signal has {len(primary_r_peaks)} R-peaks")
+
             # Build list of all leads used
-            leads_used = [primary_lead_info['lead']]
+            leads_used = [primary_lead]
+            if ecg_lead:
+                leads_used.append(ecg_lead)
             for candidate in signal_candidates:
                 if candidate['lead'] not in leads_used:
                     leads_used.append(candidate['lead'])
@@ -8838,19 +8892,22 @@ class MedtronicICDAnalyser:
             )
 
             # Add combined-specific fields
-            result.primary_lead = primary_lead_info['lead']
+            result.primary_lead = primary_lead
             result.signal_type = 'Combined'
             result.combined_analysis_performed = True
             result.combined_lead_scores = str({
-                'lead': primary_lead_info['lead'],
+                'lead': primary_lead,
                 'snr': primary_lead_info['snr'],
                 'match_count': primary_lead_info['match_count'],
                 'avg_correlation': primary_lead_info['avg_correlation'],
                 'combined_score': primary_lead_info['combined_score']
             })
 
-            # For ECG metrics, use aligned ECG and EGM peaks
-            if ecg_signal is not None and primary_type == 'EGM':
+            # === STEP 4: Calculate zero-crossing metrics with synchronized peaks ===
+            # For ECG metrics, use aligned ECG and EGM peaks (now both on same time base!)
+            if ecg_signal is not None and ecg_r_peaks is not None and primary_type == 'EGM':
+                logger.info(f"  Calculating zero-crossing metrics with synchronized peaks...")
+                logger.info(f"    ECG peaks: {len(ecg_r_peaks)}, EGM peaks: {len(primary_r_peaks)}")
                 # Calculate zero-crossing metrics using aligned peaks
                 ecg_metrics = self._calculate_combined_ecg_metrics(
                     ecg_signal, primary_signal, ecg_r_peaks, primary_r_peaks,
